@@ -7,7 +7,7 @@ from ikflow.ikflow_solver import IKFlowSolver
 from ikflow.model_loading import get_ik_solver
 from ikflow.model import IkflowModelParameters, TINY_MODEL_PARAMS
 from jrl.robot import Robot
-from jrl.robots import Panda, Fetch, FetchArm
+from jrl.robots import Panda, Fetch, FetchArm, Iiwa7, Iiwa7_L, Iiwa7_R
 import torch
 
 from cppflow.utils import (
@@ -38,6 +38,10 @@ ROBOT_TO_IKFLOW_MODEL = {
     Fetch.name: "fetch_full_temp_nsc_tpm",
     # --- FetchArm
     FetchArm.name: "fetch_arm__large__mh186_9.25m",
+    # --- Iiwa7
+    Iiwa7.name: "iiwa7__full__lp191_5.25m",
+    Iiwa7_L.name: "iiwa7_left_arm_0.75m",
+    Iiwa7_R.name: "iiwa7_right_arm_0.1m",
 }
 
 MOCK_IKFLOW_PARAMS = IkflowModelParameters()

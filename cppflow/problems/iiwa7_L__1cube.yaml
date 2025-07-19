@@ -1,11 +1,11 @@
-robot: "panda"
-path_name: "1cube_mini"
+robot: "iiwa7_L"
+path_name: "1cube"
 
 path_offset_frame: "world"
-path_xyz_offset: [0, 0.5421984559194368, 0.7885155964931997]
+path_xyz_offset: [0.3682, 0.358, 1.4885155964931997]
 path_R_offset: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
 
-obstacle_xyz_offset: [0, 0, 0]
+obstacle_xyz_offset: [0.3682, -0.1842, 0.7014]
 obstacles:
     [
         [
