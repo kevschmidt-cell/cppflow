@@ -832,7 +832,7 @@ def visualize_plan(plan: Plan, problem: Problem, time_p_loop: float = 0.1, start
 
     vis.kill()
 
-def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: Problem, time_p_loop: float = 0.1, start_delay: float = 3.0):
+def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: Problem, time_p_loop: float = 0.03, start_delay: float = 3.0):
     #print(dir(plan1.plan))
     q_path1 = plan1.plan.q_path.clone()
     pose_path1 = plan1.plan.pose_path.clone()
@@ -882,12 +882,8 @@ def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: P
     else:
         print("Warnung: Roboter 2 wurde nicht korrekt hinzugefügt.")
 
-
     robot1_name = vis.getItemName(world.robot(0))[1]
     robot2_name = vis.getItemName(world.robot(1))[1] #if robot2.klampt_model.index != 0 else f"{robot1_name}_r2"
-
-    
-
     vis.setBackgroundColor(*background_color)
 
     # === Hindernisse
@@ -907,9 +903,26 @@ def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: P
     vis.add("y_axis", trajectory.Trajectory([1, 0], [[0, 1, 0], [0, 0, 0]]))
     vis.add(robot1_name, robot1.klampt_robot)
     vis.add(robot2_name, robot2.klampt_robot)
+    vis.add(
+        "path1",
+        trajectory.Trajectory([1, 0], [waypoint[0:3] for waypoint in to_numpy(problem1.target_path)]),
+        color=(1.0, 0.0, 0.0, 1.0),
+        width=3.0,
+        hide_label=True,
+        pointSize=1,
+    )
+    vis.add(
+        "path2",
+        trajectory.Trajectory([1, 0], [waypoint[0:3] for waypoint in to_numpy(problem2.target_path)]),
+        color=(1.0, 0.0, 0.0, 1.0),
+        width=3.0,
+        hide_label=True,
+        pointSize=1,
+    )
 
     vis.resizeWindow(1600, 1200)
     vis.setWindowTitle("Dual Arm Plan Visualization")
+    
     vis.show()
 
     def update_ee_tf(pose, name):
@@ -934,6 +947,8 @@ def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: P
     i = 0
     colorized_links1 = set()
     colorized_links2 = set()
+    import time
+    last_time = time.time()
 
     while vis.shown():
         # Modify the world here. Do not modify the internal state of any visualization items outside of the lock
@@ -966,8 +981,14 @@ def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: P
 
             i += 1
         vis.unlock()
+        
+
+        # FPS ausgeben
+        now = time.time()
+        fps = 1.0 / (now - last_time)
+        print(f"FPS: {fps:.1f}")
+        last_time = now
 
         sleep(time_p_loop)
 
     vis.kill()
-
