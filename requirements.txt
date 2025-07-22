@@ -21,7 +21,6 @@ charset-normalizer==3.4.2
 click==8.2.1
 comm==0.2.2
 contourpy==1.3.2
-cppflow==0.1.0
 cycler==0.12.1
 debugpy==1.8.14
 decorator==5.2.1
@@ -43,7 +42,7 @@ h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
 idna==3.10
-ikflow @ git+https://github.com/jstmn/ikflow.git@19634d436eb805f22578b4c5b6526f96d91d0323
+ikflow @ git+https://github.com/kevschmidt-cell/ikflow
 iniconfig==2.1.0
 ipykernel==6.29.5
 ipython==8.36.0
@@ -52,7 +51,7 @@ isoduration==20.11.0
 isort==6.0.1
 jedi==0.19.2
 Jinja2==3.1.6
-jrl @ git+https://github.com/jstmn/Jrl.git@ef4c2f6eb1ba84395ff0bb01d5b7713854df6908
+jrl @ git+https://github.com/kevschmidt-cell/jrl
 json5==0.12.0
 jsonpointer==3.0.0
 jsonschema==4.23.0
