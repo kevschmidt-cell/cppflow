@@ -1,0 +1,6 @@
+robot: "iiwa7_L"
+path_name: "test"
+
+path_offset_frame: "world"
+path_xyz_offset: [0.3682, 0.358, 1.5]
+path_R_offset: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]

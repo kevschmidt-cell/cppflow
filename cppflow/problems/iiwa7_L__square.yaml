@@ -1,10 +1,10 @@
-robot:     "iiwa7"
-path_name: "hello"
+robot:     "iiwa7_L"
+path_name: "square"
 
-path_offset_frame: "square"
-path_xyz_offset: [0.75, 0, 0.5]
+path_offset_frame: "world"
+path_xyz_offset: [0.7, 0, 1.4]
 path_R_offset: [
-  [0,  0, 1],
-  [0,  1, 0],
-  [-1, 0, 0]
+  [1,  0, 0],
+  [0,  -1, 0],
+  [0, 0, -1]
 ] # rotation about +y by 90deg. This makes the gripper pointing in the same direction as the fetch robot is in the TORM demo

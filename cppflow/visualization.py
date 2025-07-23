@@ -983,11 +983,11 @@ def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: P
         vis.unlock()
         
 
-        # FPS ausgeben
-        now = time.time()
-        fps = 1.0 / (now - last_time)
-        print(f"FPS: {fps:.1f}")
-        last_time = now
+        # # FPS ausgeben
+        # now = time.time()
+        # fps = 1.0 / (now - last_time)
+        # print(f"FPS: {fps:.1f}")
+        # last_time = now
 
         sleep(time_p_loop)
 

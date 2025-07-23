@@ -1,3 +1,4 @@
+import argparse
 from cppflow.data_type_utils import problem_from_filename
 from cppflow.data_types import Constraints, PlannerSettings
 from cppflow.planners import CppFlowPlanner
@@ -9,36 +10,35 @@ CONSTRAINTS = Constraints(
     max_allowed_mjac_deg=7.0,  # from the paper
     max_allowed_mjac_cm=2.0,  # from the paper
 )
-planner_settings_dict = {
-        "CppFlow": PlannerSettings(
-            verbosity=2,
-            k=175,
-            tmax_sec=5.0,
-            anytime_mode_enabled=False,
-            do_rerun_if_large_dp_search_mjac=True,
-            do_rerun_if_optimization_fails=False,
-            do_return_search_path_mjac=False,
-        ),
-        "CppFlow_fixed_q0": PlannerSettings(
-            verbosity=2,
-            k=175,
-            tmax_sec=3.0,
-            anytime_mode_enabled=False,
-            latent_vector_scale=0.5,
-            do_rerun_if_large_dp_search_mjac=False,
-            do_rerun_if_optimization_fails=False,
-            do_return_search_path_mjac=False,
-        ),
-        "PlannerSearcher": PlannerSettings(
-            k=175,
-            tmax_sec=5.0,
-            anytime_mode_enabled=False,
-        ),
-    }
 
-planner_settings = (
-        planner_settings_dict["CppFlow"]
-    )
+planner_settings_dict = {
+    "CppFlow": PlannerSettings(
+        verbosity=2,
+        k=175,
+        tmax_sec=5.0,
+        anytime_mode_enabled=False,
+        do_rerun_if_large_dp_search_mjac=True,
+        do_rerun_if_optimization_fails=False,
+        do_return_search_path_mjac=False,
+    ),
+    "CppFlow_fixed_q0": PlannerSettings(
+        verbosity=2,
+        k=175,
+        tmax_sec=3.0,
+        anytime_mode_enabled=False,
+        latent_vector_scale=0.5,
+        do_rerun_if_large_dp_search_mjac=False,
+        do_rerun_if_optimization_fails=False,
+        do_return_search_path_mjac=False,
+    ),
+    "PlannerSearcher": PlannerSettings(
+        k=175,
+        tmax_sec=5.0,
+        anytime_mode_enabled=False,
+    ),
+}
+
+planner_settings = planner_settings_dict["CppFlow"]
 
 class DualArmProblem:
     def __init__(self, problem_left, problem_right):
@@ -60,25 +60,30 @@ class DualArmPlanner:
 
 
 def main():
-    # Load individual problems
-    problem_left = problem_from_filename(CONSTRAINTS, "iiwa7_L__flappy_bird")
-    problem_right = problem_from_filename(CONSTRAINTS, "iiwa7_R__flappy_bird")
+    parser = argparse.ArgumentParser(description="Dual Arm Planner")
+    parser.add_argument(
+        "--problem", type=str, default="flappy_bird",
+        help="Problem name suffix, e.g. 'flappy_bird', 'circle', etc."
+    )
+    args = parser.parse_args()
 
-    # Wrap in dual-arm problem
+    # Dynamisch Problem-Namen zusammenbauen
+    problem_left_name = f"iiwa7_L__{args.problem}"
+    problem_right_name = f"iiwa7_R__{args.problem}"
+
+    # Probleme laden
+    problem_left = problem_from_filename(CONSTRAINTS, problem_left_name)
+    problem_right = problem_from_filename(CONSTRAINTS, problem_right_name)
+
     dual_problem = DualArmProblem(problem_left, problem_right)
 
-    # Initialize planners
-    planner_left = CppFlowPlanner(planner_settings,problem_left.robot)
-    planner_right = CppFlowPlanner(planner_settings,problem_right.robot)
+    planner_left = CppFlowPlanner(planner_settings, problem_left.robot)
+    planner_right = CppFlowPlanner(planner_settings, problem_right.robot)
 
     dual_planner = DualArmPlanner(planner_left, planner_right)
     traj_left, traj_right = dual_planner.plan(dual_problem)
 
-    # Visualize
-    visualize_dual_plan(
-        traj_left, problem_left, traj_right,
-        problem_right
-    ) 
+    visualize_dual_plan(traj_left, problem_left, traj_right, problem_right)
 
 
 if __name__ == "__main__":

@@ -9,18 +9,18 @@ path_R_offset: [
   [-1, 0, 0]
 ]
 
-obstacle_xyz_offset: [0.4682, -0.1842, 0.6014]
-obstacles:
-    [
-        [
-            size_x: 0.25,
-            size_y: 0.25,
-            size_z: 0.25,
-            x: 0.0,
-            y: 0.2,
-            z: 0.7,
-            roll: 0.0,
-            pitch: 0.0,
-            yaw: 0.0,
-        ],
-    ]
+# obstacle_xyz_offset: [0.4682, -0.1842, 0.6014]
+# obstacles:
+#     [
+#         [
+#             size_x: 0.25,
+#             size_y: 0.25,
+#             size_z: 0.25,
+#             x: 0.0,
+#             y: 0.2,
+#             z: 0.7,
+#             roll: 0.0,
+#             pitch: 0.0,
+#             yaw: 0.0,
+#         ],
+#     ]
