@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="obj_se3">
+    
+    <!-- center of mass -->
+    <link name="obj_com">
+        <inertial>
+            <!-- use scripts/compute_object_inertia.py to compute inertia properties -->
+            <!-- <origin xyz="0.0 0.0 0.0" rpy=".0 .0 .0" /> -->
+            
+            <!-- Ixx = Izz = 1/12 m (l^2+h^2), Iyy = 1/12 m (h^2+h^2), h = 0.04m, l = 0.4m-->
+            <!-- no load -->
+             <!-- <mass value="1.2" /> -->
+            <!-- <inertia ixx="0.014" ixy=".0" ixz=".0" iyy="0.00028" iyz=".0" izz="0.014" />  -->
+            <!-- 4kg added load closest -->
+             <!-- <mass value="5.2" />
+             <inertia ixx="0.02876" ixy=".0" ixz=".0" iyy="0.01252" iyz=".0" izz="0.02316" /> -->
+              <!-- <mass value="9.2" />
+             <inertia ixx="0.05352" ixy=".0" ixz=".0" iyy="0.02476" iyz=".0" izz="0.04232" /> -->
+
+            <!-- <mass value="1.4000000000000001" />
+            <origin xyz="0.0 0.04714285714285714 0.0" rpy="0.0 0.0 0.0" />
+            <inertia ixx="0.029413333333333333" ixy="0.0" ixz="0.0" iyy="0.0013333333333333335" iyz="0.0" izz="0.030373333333333336" />  -->
+
+            <!-- <mass value="5.4" />
+            <origin xyz="0.0 0.012222222222222221 0.0" rpy=".0 .0 .0" />
+            <inertia ixx="0.04418000000000001" ixy="0.0" ixz="0.0" iyy="0.013600000000000001" iyz="0.0" izz="0.03953999999999999" />  -->
+
+            <mass value="9.4" />
+            <origin xyz="0.0 0.007021276595744681 0.0" rpy=".0 .0 .0" />
+            <inertia ixx="0.06894666666666667" ixy="0.0" ixz="0.0" iyy="0.025866666666666663" iyz="0.0" izz="0.05870666666666666" /> 
+
+            <!-- <mass value="11.4" />
+            <origin xyz="0.0 0.005789473684210527 0.0" rpy=".0 .0 .0" /> -->
+            <!-- <inertia ixx="0.08133" ixy="0.0" ixz="0.0" iyy="0.031999999999999994" iyz="0.005625" izz="0.06828999999999999" />  -->
+
+            <!-- use this for simulation as small inertias cause numerical issues -->
+            <!-- <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>  -->
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="meshes/object/se3_object.stl"/>
+            </geometry>
+            <material name="">
+                <color rgba="0.4 0.4 0.4 1.0" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="meshes/object/se3_object.stl"/>
+            </geometry>
+            <material name="">
+                <color rgba="0.4 0.4 0.4 1.0" />
+            </material>
+        </collision>
+    </link>
+
+    <!-- measured frame -->
+    <joint name="com_measured_joint" type="fixed">
+        <parent link="obj_com"/>
+        <child link="obj_measured"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <link name="obj_measured"></link>
+
+    <!-- grasp frames -->
+    <joint name="virt_stick_01" type="fixed">
+        <parent link="obj_com"/>
+        <child link="obj_p_01"/>
+        <origin xyz="0 -0.14 0" rpy="1.57079 3.14 1.57079"/>
+    </joint>
+    <link name="obj_p_01"></link>
+
+    <joint name="virt_stick_02" type="fixed">
+        <parent link="obj_com"/>
+        <child link="obj_p_02"/>
+        <!-- <origin xyz="0 0.16 0" rpy="1.57079 0 1.57079"/> -->
+        <origin xyz="0 0.24 0" rpy="1.57079 3.14 0.0"/>
+    </joint>
+    <link name="obj_p_02"></link>
+
+    <!-- link that shall be tracked by controller -->
+    <joint name="obj_pref_joint" type="fixed">
+        <parent link="obj_com" />
+        <child link="obj_ref" />
+        <origin rpy="0 0 0" xyz="0 0 0" />
+    </joint> 
+    <link name="obj_ref"/>
+
+</robot>

@@ -238,7 +238,7 @@ class Planner:
         with TimerContext("calculating self-colliding configs", enabled=self._cfg.verbosity > 0):
             self_collision_violations = qpaths_batched_self_collisions(problem, qs)
             pct_colliding = (torch.sum(self_collision_violations) / (k_current * problem.n_timesteps)).item() * 100
-            assert pct_colliding < 95.0, f"too many env collisions: {pct_colliding} %"
+            assert pct_colliding < 95.0, f"too many self collisions: {pct_colliding} %"
             print_v2(f"  self_collision violations: {pct_colliding} %")
 
             if self._cfg.verbosity > 2:

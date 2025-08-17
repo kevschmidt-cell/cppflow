@@ -1,41 +1,57 @@
-import csv
+import numpy as np
+import pandas as pd
 from scipy.spatial.transform import Rotation as R
 
-# Rotation um Z-Achse um 90 Grad
-rot_90z = R.from_euler('z', 90, degrees=True)
+# Hilfsfunktion: 4x4-Transform aus Translation + RPY
+def make_transform(xyz, rpy):
+    T = np.eye(4)
+    T[:3, :3] = R.from_euler('xyz', rpy).as_matrix()
+    T[:3, 3] = xyz
+    return T
 
-input_file = 'cppflow/paths/hello_mini.csv'
-output_file = 'cppflow/paths/hello_mini_rotated.csv'
+# --- Basis-Posen aus URDF ---
+T_world_left = make_transform(
+    [0.3682, -0.1842, 0.7014],   # Position (m)
+    [0.0039, -0.0030, -0.0161]   # RPY (rad)
+)
 
-with open(input_file, 'r') as f_in, open(output_file, 'w', newline='') as f_out:
-    reader = csv.reader(f_in)
-    writer = csv.writer(f_out)
+T_world_right = make_transform(
+    [0.3743,  0.1816, 0.7048],   # Position (m)
+    [-0.0012, 0.0001, -0.0158]   # RPY (rad)
+)
 
-    header = next(reader)
-    writer.writerow(header)
+# --- Transformationen ---
+T_left_right = np.linalg.inv(T_world_right) @ T_world_left
+T_right_left = np.linalg.inv(T_left_right)
 
-    for row in reader:
-        t = row[0]
-        x, y, z = map(float, row[1:4])
-        qw, qx, qy, qz = map(float, row[4:8])
+# --- CSV einlesen ---
+df = pd.read_csv("cppflow/paths/flappy_bird.csv", skiprows=1, header=None)
+df.columns = ['t', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz']
 
-        # Position rotieren: 90° um Z
-        x_new = -y
-        y_new = x
-        z_new = z
+# --- Transformation ---
+rows_out = []
+for _, row in df.iterrows():
+    pos_left = np.array([row['x'], row['y'], row['z']])
+    quat_left = np.array([row['qx'], row['qy'], row['qz'], row['qw']])
+    rot_left = R.from_quat(quat_left).as_matrix()
 
-        # Quaternion rotieren (wichtig: scipy Rotation erwartet [x,y,z,w])
-        quat_orig = R.from_quat([qx, qy, qz, qw])
-        quat_new = rot_90z * quat_orig
-        qx_new, qy_new, qz_new, qw_new = quat_new.as_quat()
+    T_left_obj = np.eye(4)
+    T_left_obj[:3, :3] = rot_left
+    T_left_obj[:3, 3] = pos_left
 
-        # Neue Werte in die Zeile schreiben
-        row[1] = f"{x_new:.6f}"
-        row[2] = f"{y_new:.6f}"
-        row[3] = f"{z_new:.6f}"
-        row[4] = f"{qw_new:.6f}"
-        row[5] = f"{qx_new:.6f}"
-        row[6] = f"{qy_new:.6f}"
-        row[7] = f"{qz_new:.6f}"
+    T_right_obj = T_right_left @ T_left_obj
 
-        writer.writerow(row)
+    pos_right = T_right_obj[:3, 3]
+    quat_right = R.from_matrix(T_right_obj[:3, :3]).as_quat()  # (qx, qy, qz, qw)
+
+    rows_out.append([
+        row['t'],
+        pos_right[0], pos_right[1], pos_right[2],
+        quat_right[3], quat_right[0], quat_right[1], quat_right[2]
+    ])
+
+# --- Speichern ---
+df_out = pd.DataFrame(rows_out, columns=['t', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'])
+# Dummy-Zeile oben einfügen
+df_out.to_csv("cppflow/paths/flappy_bird_right.csv", index=False)
+print("✅ Trajektorie in rechte Basis transformiert und gespeichert")

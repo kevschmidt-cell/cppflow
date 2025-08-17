@@ -2,11 +2,11 @@ robot:     "iiwa7_L"
 path_name: "circle"
 
 path_offset_frame: "world"
-path_xyz_offset: [0.9, 0.15, 1.26] 
+path_xyz_offset: [0.9, 0, 1.26] 
 path_R_offset: [
-  [0,  0, 1],
   [0,  1, 0],
-  [-1, 0, 0]
+  [-1,  0, 0],
+  [0, 0, 1]
 ]
 
 # obstacle_xyz_offset: [0.4682, -0.1842, 0.6014]
