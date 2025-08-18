@@ -39,7 +39,7 @@ from ikflow.model_loading import get_ik_solver
 from ikflow.config import DEVICE
 
 # Klampt
-from klampt import WorldModel
+from klampt import WorldModel, vis
 from klampt.model import collide
 
 set_seed(42)
@@ -66,6 +66,23 @@ def posevec_to_T(v):
     T[:3, :3] = R.from_quat([qx, qy, qz, qw]).as_matrix()
     T[:3, 3] = [x, y, z]
     return T
+
+def visualize_dual_arm_pose(wc, T_obj, T_left_offset, T_right_offset, ik_left, ik_right):
+    # IK berechnen
+    left_ee_pose = T_to_posevec(T_obj @ T_left_offset)
+    right_ee_pose = T_to_posevec(T_obj @ T_right_offset)
+    
+    okL, qL = batch_ik_and_filter(ik_left, [left_ee_pose])[0]
+    okR, qR = batch_ik_and_filter(ik_right, [right_ee_pose])[0]
+    
+    if not (okL and okR):
+        print("Keine gültige IK für diese Pose!")
+        return
+    
+    wc.set_q(qL, qR)
+    wc.set_object_T(T_obj)
+    
+    wc.view()
 
 # ---------------------------
 # Objekt-URDF: Grasp-Offsets & Meshpfad
@@ -139,6 +156,17 @@ def parse_object_urdf_for_offsets_and_mesh(urdf_object_path,
 
     return T_obj_to_left, T_obj_to_right, mesh_abs
 
+def expand_q_to_full(robot, q_partial):
+    """
+    q_partial: Array der Treiber-Gelenke (7 DoF)
+    Gibt eine volle Konfiguration zurück (inkl. Fixed Joints)
+    """
+    full_config = robot.getConfig()[:]       # aktuelle volle Konfiguration als Basis
+    for i in range(robot.numDrivers()):
+        drv = robot.driver(i)                # Treiber i abrufen
+        full_config[drv.index] = float(q_partial[i])
+    return full_config
+
 # ---------------------------
 # Kollisionen (Klampt)
 # ---------------------------
@@ -161,36 +189,62 @@ class WorldCollision:
 
         self.collider = collide.WorldCollider(self.world)
 
+    def view(self):
+        """Zeigt die aktuelle Szene in einem interaktiven Klampt-Fenster"""
+        vis.add("world", self.world)
+        vis.setAttribute("world", "drawTransparency", 0.3)
+        vis.setAttribute("world", "drawContacts", True)  # hebt Kontaktpunkte hervor
+        vis.show()
+        vis.loop()
+
     def set_q(self, qL, qR):
-        self.robot_L.setConfig(qL.tolist() if isinstance(qL, np.ndarray) else list(qL))
-        self.robot_R.setConfig(qR.tolist() if isinstance(qR, np.ndarray) else list(qR))
+        print("qL shape:", np.shape(qL))
+        print("robot_L dofs:", self.robot_L.numDrivers())
+        print("robot_L config length:", self.robot_L.numLinks())
+        print("Expected config length:", self.robot_L.numLinks())
+        print("robot_L initial config length:", len(self.robot_L.getConfig()))
+
+        qL_full = expand_q_to_full(self.robot_L, qL)
+        qR_full = expand_q_to_full(self.robot_R, qR)
+
+        self.robot_L.setConfig(list(qL_full))
+        self.robot_R.setConfig(list(qR_full))
 
     def set_object_T(self, T_world_obj):
         Rm = T_world_obj[:3, :3]
         t = T_world_obj[:3, 3]
-        self.obj.setTransform(Rm, t)
+        # Flatten R in row-major order
+        R_list = Rm.flatten().tolist()
+        t_list = t.tolist()
+        self.obj.setTransform(R_list, t_list)
 
-    def any_collision(self, verbose=False):
-        if self.collider.robotSelfCollision(self.robot_L):
-            if verbose: print("Self-collision L")
+    def any_collision(self):
+        # Selbstkollision prüfen
+        if self.collider.robotSelfCollisions(self.robot_L):
+            print("Linker Arm kollidiert mit sich selbst")
             return True
-        if self.collider.robotSelfCollision(self.robot_R):
-            if verbose: print("Self-collision R")
-            return True
-
-        for (a, b) in self.collider.robotRobotCollisions(self.robot_L, self.robot_R):
-            if verbose: print("Collision L-R:", a, b)
-            return True
-
-        for (a, b) in self.collider.robotObjectCollisions(self.robot_L, self.obj):
-            if verbose: print("Collision L-Obj:", a, b)
+        if self.collider.robotSelfCollisions(self.robot_R):
+            print("Rechter Arm kollidiert mit sich selbst")
             return True
 
-        for (a, b) in self.collider.robotObjectCollisions(self.robot_R, self.obj):
-            if verbose: print("Collision R-Obj:", a, b)
+        # Roboter ↔ Objekt Kollision prüfen
+        if self.collider.robotObjectCollisions(self.robot_L, self.obj):
+            print("Linker Arm kollidiert mit Objekt")
+            return True
+        if self.collider.robotObjectCollisions(self.robot_R, self.obj):
+            print("Rechter Arm kollidiert mit Objekt")
             return True
 
+        # Arm ↔ Arm Kollision prüfen
+        for l_link in self.robot_L.links():
+            for r_link in self.robot_R.links():
+                if self.collider.linkLinkCollision(l_link, r_link):
+                    print(f"Kollision zwischen {l_link.getName()} und {r_link.getName()}")
+                    return True
+
+        # Keine Kollision gefunden
         return False
+
 
 
 # ---------------------------
@@ -275,7 +329,6 @@ def rrt_dual(
         cand_batch.append((idx_near, new_pose))
 
         if len(cand_batch) >= batch_size or it == max_iters - 1:
-            # FK Ziel-EEF-Posen aus Objektpose + Grasp-Offsets
             mats_obj = [posevec_to_T(p) for _, p in cand_batch]
             mats_left_ee = [m @ T_obj_left_offset for m in mats_obj]
             mats_right_ee = [m @ T_obj_right_offset for m in mats_obj]
@@ -285,32 +338,53 @@ def rrt_dual(
             resL = batch_ik_and_filter(ik_left, poses_left)
             resR = batch_ik_and_filter(ik_right, poses_right)
 
-            for (idx_parent, cand_pose), (okL, qL), (okR, qR) in zip(cand_batch, resL, resR):
-                if not okL or not okR:
-                    continue
+            # Debug: Kandidaten prüfen mit detaillierter Kollisionserkennung
+            MAX_DEBUG = 5
+            debug_count = 0
 
-                # Setze Weltzustand, dann Kollisionen prüfen
+            from klampt import vis
+
+            contact_markers = []
+
+            for idx, ((idx_parent, cand_pose), (okL, qL), (okR, qR)) in enumerate(zip(cand_batch, resL, resR)):
+                if not (okL and okR):
+                    continue  # Überspringe Kandidaten ohne gültige IK
+                
                 wc.set_q(qL, qR)
                 wc.set_object_T(posevec_to_T(cand_pose))
-                if wc.any_collision():
-                    continue
+                wc.view()
+                collisions = []
+
+                # Selbstkollisionen
+                if wc.collider.robotSelfCollisions(wc.robot_L):
+                    collisions.append("left_arm_self")
+                if wc.collider.robotSelfCollisions(wc.robot_R):
+                    collisions.append("right_arm_self")
+
+                # Arm-Objekt-Kollision
+                if wc.collider.robotObjectCollisions(wc.robot_L, wc.obj):
+                    collisions.append("left_arm_obj")
+                if wc.collider.robotObjectCollisions(wc.robot_R, wc.obj):
+                    collisions.append("right_arm_obj")
+
+                if collisions:
+                    print(f"[Debug {idx}] collisions: {collisions}")
+                    continue  # Kandidat verwerfen
 
                 # Node akzeptieren
                 tree.append(cand_pose)
-                cur_idx = len(tree) - 1
-                parents[cur_idx] = idx_parent
+                parents[len(tree)-1] = idx_parent
 
-                # Nähe zum Ziel?
+                # Zielprüfung
                 if pose_distance(cand_pose, goal_obj_pose) < step_size:
-                    # Pfad backtracken
                     path = []
-                    k = cur_idx
+                    k = len(tree)-1
                     while k is not None:
                         path.append(tree[k])
                         k = parents[k]
                     path.reverse()
 
-                    # Gelenkbahnen für finalen Pfad berechnen (nochmal Batch-IK)
+                    # Gelenkpfade
                     mats = [posevec_to_T(p) for p in path]
                     Lposes = [T_to_posevec(m @ T_obj_left_offset) for m in mats]
                     Rposes = [T_to_posevec(m @ T_obj_right_offset) for m in mats]
@@ -320,9 +394,10 @@ def rrt_dual(
                     qR_list = [q for ok, q in JR]
                     return path, qL_list, qR_list
 
-            cand_batch = []
+        cand_batch.clear()
 
     return None, None, None
+
 
 # ---------------------------
 # CLI
