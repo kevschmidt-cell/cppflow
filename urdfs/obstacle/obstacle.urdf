@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="obstacle">
+    <link name="world"/>
+    <joint name="world_to_obstacle" type="fixed">
+        <origin xyz="0.8 0 0.15" rpy="0 0 0"/>
+        <parent link="world"/> <!-- oder ganz weglassen, je nach Loader -->
+        <child link="obstacle_box"/>
+    </joint>
+    <link name="obstacle_box">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.5 0.5 0.3"/> <!-- Breite, Tiefe, Höhe -->
+            </geometry>
+            <material name="gray">
+                <color rgba="0.5 0.5 0.5 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.5 0.5 0.3"/>
+            </geometry>
+        </collision>
+    </link>
+</robot>
+

@@ -832,25 +832,49 @@ def visualize_plan(plan: Plan, problem: Problem, time_p_loop: float = 0.1, start
 
     vis.kill()
 
-def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: Problem, time_p_loop: float = 0.03, start_delay: float = 3.0):
-    #print(dir(plan1.plan))
-    q_path1 = plan1.plan.q_path.clone()
-    pose_path1 = plan1.plan.pose_path.clone()
-    robot1 = problem1.robot
+import numpy as np
+from klampt import vis
+from klampt.math import so3
 
-    q_path2 = plan2.plan.q_path.clone()
-    pose_path2 = plan2.plan.pose_path.clone()
-    robot2 = problem2.robot
-    print(type(robot2))
-    print(hasattr(robot2, "klampt_model"))
+from time import sleep
+from cppflow.utils import to_numpy
 
+def visualize_dual_plan(plan_left, problem_left,
+                        plan_right, problem_right,
+                        time_p_loop: float = 0.03, start_delay: float = 3.0):
+    """
+    Visualisiert einen Dual-Arm-Plan in Klampt. Kompatibel mit PlannerResult, wandelt Torch-Tensoren in NumPy um.
+    """
+    print(dir(plan_left))
+    print(plan_left.__dict__)
+    print(dir(plan_left.plan))
+    print(plan_left.plan.__dict__)
+
+    # --- q_path und pose_path extrahieren ---
+    def to_numpy(x):
+        import torch
+        if torch.is_tensor(x):
+            return x.cpu().numpy()
+        return np.array(x)
+
+    q_path_left = to_numpy(plan_left.plan.q_path)
+    q_path_right = to_numpy(plan_right.plan.q_path)
+
+    pose_path_left = to_numpy(plan_left.pose_path) if hasattr(plan_left, "pose_path") else None
+    pose_path_right = to_numpy(plan_right.pose_path) if hasattr(plan_right, "pose_path") else None
+
+    robot_left = problem_left.robot
+    robot_right = problem_right.robot
+
+    # Hintergrundfarbe
     background_color = (1, 1, 1, 0.7)
 
+    # ---- Floor grid ----
     size = 3
     for x0 in range(-size, size + 1):
         for y0 in range(-size, size + 1):
             vis.add(
-                f"floor_{x0}_{y0}",
+                f"floor_{x0}_{y0}_x",
                 trajectory.Trajectory([1, 0], [(-size, y0, 0), (size, y0, 0)]),
                 color=(0.75, 0.75, 0.75, 1.0),
                 width=2.0,
@@ -858,7 +882,7 @@ def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: P
                 pointSize=0,
             )
             vis.add(
-                f"floor_{x0}_{y0}2",
+                f"floor_{x0}_{y0}_y",
                 trajectory.Trajectory([1, 0], [(x0, -size, 0), (x0, size, 0)]),
                 color=(0.75, 0.75, 0.75, 1.0),
                 width=2.0,
@@ -866,129 +890,37 @@ def visualize_dual_plan(plan1: Plan, problem1: Problem, plan2: Plan, problem2: P
                 pointSize=0,
             )
 
-     # === Visualisierung der Roboter-Welt
-    world = robot1.klampt_world_model
-    vis.add("world", world)
-    world.add("robot1",robot1.klampt_robot)
-    # Roboter 2 zur Welt hinzufügen, falls nicht schon da
-    if robot2.klampt_robot.index != robot1.klampt_robot.index:
-        world.add("robot2",robot2.klampt_robot)
-    
-    print("robot1 index:", robot1.klampt_robot.index)
-    print("robot2 index:", robot2.klampt_robot.index)
+    # Roboter hinzufügen
+    vis.add("world_left", robot_left.klampt_world_model)
+    vis.add("world_right", robot_right.klampt_world_model)
 
-    if world.numRobots() > 1:
-        robot2_name = vis.getItemName(world.robot(1))[1]
-    else:
-        print("Warnung: Roboter 2 wurde nicht korrekt hinzugefügt.")
-
-    robot1_name = vis.getItemName(world.robot(0))[1]
-    robot2_name = vis.getItemName(world.robot(1))[1] #if robot2.klampt_model.index != 0 else f"{robot1_name}_r2"
     vis.setBackgroundColor(*background_color)
-
-    # === Hindernisse
-    for i, obs in enumerate(problem1.obstacles + problem2.obstacles):
-        R = [1.0, 0.0, 0.0,
-             0.0, 1.0, 0.0,
-             0.0, 0.0, 1.0]
-        assert abs(obs["roll"]) < 1e-8 and abs(obs["pitch"]) < 1e-8 and abs(obs["yaw"]) < 1e-8
-        box = create.box(
-            width=obs["size_x"], height=obs["size_z"], depth=obs["size_y"],
-            center=(0, 0, 0), t=(obs["x"], obs["y"], obs["z"]), R=R
-        )
-        vis.add(f"box_{i}", box, color=(0.0, 1.0, 0.0, 0.75), hide_label=True)
-
-    vis.add("coordinates", coordinates.manager())
-    vis.add("x_axis", trajectory.Trajectory([1, 0], [[1, 0, 0], [0, 0, 0]]))
-    vis.add("y_axis", trajectory.Trajectory([1, 0], [[0, 1, 0], [0, 0, 0]]))
-    vis.add(robot1_name, robot1.klampt_robot)
-    vis.add(robot2_name, robot2.klampt_robot)
-    vis.add(
-        "path1",
-        trajectory.Trajectory([1, 0], [waypoint[0:3] for waypoint in to_numpy(problem1.target_path)]),
-        color=(1.0, 0.0, 0.0, 1.0),
-        width=3.0,
-        hide_label=True,
-        pointSize=1,
-    )
-    vis.add(
-        "path2",
-        trajectory.Trajectory([1, 0], [waypoint[0:3] for waypoint in to_numpy(problem2.target_path)]),
-        color=(1.0, 0.0, 0.0, 1.0),
-        width=3.0,
-        hide_label=True,
-        pointSize=1,
-    )
-
     vis.resizeWindow(1600, 1200)
-    vis.setWindowTitle("Dual Arm Plan Visualization")
-    
+    vis.setWindowTitle("Dual-arm plan visualization")
     vis.show()
 
-    def update_ee_tf(pose, name):
-        R = so3.from_quaternion(pose[3:7])
-        t = pose[0:3]
-        T = (R, t)
-        vis.add(name, T, length=0.2, width=0.01, fancy=False)
-        # vis.add("end_effector", T, length=0.15, width=2, fancy=False) # width is only used for 'fancy' mode (I
-        # believe)
-
-    # Starte mit erster Konfiguration
-    q_path1 = to_numpy(q_path1)
-    q_path2 = to_numpy(q_path2)
-
-    robot1.set_klampt_robot_config(q_path1[0])
-    robot2.set_klampt_robot_config(q_path2[0])
-    update_ee_tf(pose_path1[0], "end_effector")
-    update_ee_tf(pose_path2[0], "end_effector")
-
+    # Startkonfiguration setzen
+    robot_left.set_klampt_robot_config(q_path_left[0])
+    robot_right.set_klampt_robot_config(q_path_right[0])
     delay(start_delay)
 
+    # ---- Animationsschleife ----
     i = 0
-    colorized_links1 = set()
-    colorized_links2 = set()
-    import time
-    last_time = time.time()
-
     while vis.shown():
-        # Modify the world here. Do not modify the internal state of any visualization items outside of the lock
         vis.lock()
-        if i < min(len(q_path1), len(q_path2)):
-            q1, q2 = q_path1[i], q_path2[i]
-            robot1.set_klampt_robot_config(q1)
-            robot2.set_klampt_robot_config(q2)
+        if i < len(q_path_left) and i < len(q_path_right):
+            robot_left.set_klampt_robot_config(q_path_left[i])
+            robot_right.set_klampt_robot_config(q_path_right[i])
 
-            update_ee_tf(pose_path1[i], "ee_1")
-            update_ee_tf(pose_path2[i], "ee_2")
-
-            # Kollisionsprüfungen
-            colliding1 = env_colliding_links_klampt(problem1, q1)
-            colliding2 = env_colliding_links_klampt(problem2, q2)
-
-            for link in colliding1:
-                colorized_links1.add(link)
-                vis.setColor(("world", robot1_name, link), 1, 0, 0)
-            for link in colorized_links1:
-                if link not in colliding1:
-                    vis.setColor(("world", robot1_name, link), 1.0, 1.0, 1.0)
-
-            for link in colliding2:
-                colorized_links2.add(link)
-                vis.setColor(("world", robot2_name, link), 1, 0, 0)
-            for link in colorized_links2:
-                if link not in colliding2:
-                    vis.setColor(("world", robot2_name, link), 1.0, 1.0, 1.0)
+            # Optional: Endeffektoren aktualisieren, falls pose_path vorhanden
+            if pose_path_left is not None and pose_path_right is not None:
+                # update_end_effector_tf(pose_path_left[i], "end_eff_left")
+                # update_end_effector_tf(pose_path_right[i], "end_eff_right")
+                pass
 
             i += 1
         vis.unlock()
-        
-
-        # # FPS ausgeben
-        # now = time.time()
-        # fps = 1.0 / (now - last_time)
-        # print(f"FPS: {fps:.1f}")
-        # last_time = now
-
         sleep(time_p_loop)
 
     vis.kill()
+
