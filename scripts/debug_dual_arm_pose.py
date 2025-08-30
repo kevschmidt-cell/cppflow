@@ -30,13 +30,20 @@ def draw_frame(T, name, size=0.05):
     vis.add("frame_"+name+"_z", [origin, z_dir], color=(0,0,1,1))
 
 def T_to_posevec(T):
+    """
+    Konvertiert eine 4x4-Transformationsmatrix in [x,y,z,qw,qx,qy,qz].
+    """
     p = T[:3, 3]
-    q = R.from_matrix(T[:3, :3]).as_quat()
-    return [float(p[0]), float(p[1]), float(p[2]), float(q[3]), float(q[0]), float(q[1]), float(q[2])]
+    qx, qy, qz, qw = R.from_matrix(T[:3, :3]).as_quat()  # scipy gibt (x,y,z,w) zurück
+    return [float(p[0]), float(p[1]), float(p[2]), float(qw), float(qx), float(qy), float(qz)]
 
 def posevec_to_T(v):
+    """
+    Konvertiert [x,y,z,qw,qx,qy,qz] zurück in eine 4x4-Transformationsmatrix.
+    """
     x, y, z, qw, qx, qy, qz = map(float, v)
     T = np.eye(4)
+    # scipy erwartet (x,y,z,w)
     T[:3, :3] = R.from_quat([qx, qy, qz, qw]).as_matrix()
     T[:3, 3] = [x, y, z]
     return T
@@ -78,7 +85,7 @@ def batch_ik_and_filter(ik_solver, poses_batch):
 # ---------------------------
 # Batch IK: mehrere Lösungen
 # ---------------------------
-def batch_ik_and_filter_multi(ik_solver, poses_batch, n_solutions=5):
+def batch_ik_and_filter_multi(ik_solver, poses_batch, n_solutions=2):
     if not poses_batch:
         return []
 
@@ -146,7 +153,7 @@ class WorldCollision:
         print("qL_full:", qL_full)
 
     def set_object_T(self, T_world_obj):
-        R_flat = T_world_obj[:3, :3].flatten().tolist()
+        R_flat = T_world_obj[:3, :3].T.flatten().tolist()
         t_list = T_world_obj[:3, 3].tolist()
         self.obj.setTransform(R_flat, t_list)
 
@@ -206,6 +213,7 @@ def visualize_pose2(wc, ik_left, ik_right, T_obj, T_left_offset, T_right_offset,
     draw_frame(T_right_global, "right_ee_target", size=0.05)
 
     wc.view()
+
 
 
 def visualize_pose(wc, ik_left, ik_right, T_obj, T_left_offset, T_right_offset):

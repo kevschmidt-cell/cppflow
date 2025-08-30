@@ -68,7 +68,7 @@
     <joint name="virt_stick_01" type="fixed">
         <parent link="obj_com"/>
         <child link="obj_p_01"/>
-        <origin xyz="0 -0.18 0" rpy="0 1.57079 0"/>
+        <origin xyz="0 -0.14 0" rpy="0 1.57079 0"/>
     </joint>
     <link name="obj_p_01"></link>
 

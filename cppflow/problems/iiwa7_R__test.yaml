@@ -1,5 +1,5 @@
 robot: "iiwa7_R"
-path_name: "end_eff_right"
+path_name: "run1_ee_right"
 
 path_offset_frame: "world"
 path_xyz_offset: [0, 0, 0]
