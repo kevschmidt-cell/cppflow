@@ -10,6 +10,7 @@ python scripts/rrt_ompl.py \
   --goal_obj  "1,-0.3,1.1,1,0,0,0" \
   --bounds "0.8,1.2,-0.6,-0.2,0.8,1.2" \
   --time_limit 40 \
+  --max_rot_deg 35 \
   --save_prefix run1
 """
 
@@ -214,12 +215,15 @@ class DualArmCollisionChecker:
 # OMPL State Validity Checker
 # ---------------------------
 class DualArmOMPLChecker:
-    def __init__(self, ik_left, ik_right, checker, T_obj_left_off, T_obj_right_off):
+    def __init__(self, ik_left, ik_right, checker, T_obj_left_off, T_obj_right_off,
+                 R_start, max_rot_angle=np.deg2rad(35)):
         self.ik_left = ik_left
         self.ik_right = ik_right
         self.checker = checker
         self.T_obj_left_off = T_obj_left_off
         self.T_obj_right_off = T_obj_right_off
+        self.R_start = R_start
+        self.max_rot_angle = max_rot_angle
 
     def __call__(self, state):
         # Extrahiere Objektpose aus SE3-State
@@ -228,6 +232,13 @@ class DualArmOMPLChecker:
         # OMPL Quaternion: (x,y,z,w)
         quat = [rot.x, rot.y, rot.z, rot.w]
         T_obj = posevec_to_T([*xyz, quat[3], quat[0], quat[1], quat[2]])
+
+        # Rotationsabweichung prüfen
+        R_curr = R.from_matrix(T_obj[:3,:3])
+        R_rel = self.R_start.inv() * R_curr
+        angle = R_rel.magnitude()
+        if angle > self.max_rot_angle:
+            return False
 
         # IK für beide Arme (eine Lösung genügt)
         pose_left  = T_to_posevec(T_obj @ self.T_obj_left_off)
@@ -247,8 +258,8 @@ class DualArmOMPLChecker:
 # OMPL Planung
 # ---------------------------
 def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
-                   T_obj_left_off, T_obj_right_off,
-                   time_limit=60.0, simplify=True, range_hint=None):
+                   T_obj_left_off, T_obj_right_off, R_start,
+                   time_limit=60.0, simplify=True, range_hint=None, max_rot_deg=35):
     space = ob.SE3StateSpace()
 
     # Positionsgrenzen
@@ -260,7 +271,8 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
 
     si = ob.SpaceInformation(space)
     si.setStateValidityChecker(ob.StateValidityCheckerFn(
-        DualArmOMPLChecker(ik_left, ik_right, checker, T_obj_left_off, T_obj_right_off)
+        DualArmOMPLChecker(ik_left, ik_right, checker, T_obj_left_off, T_obj_right_off,
+                           R_start,max_rot_angle=np.deg2rad(max_rot_deg))
     ))
     # etwas gröbere Auflösung spart IK-Aufrufe; bei Bedarf feiner machen (z.B. 0.01)
     si.setStateValidityCheckingResolution(0.02)
@@ -376,8 +388,11 @@ def main():
     ap.add_argument("--goal_tol", type=float, default=0.01)
     ap.add_argument("--save_prefix", default="ompl_dual")
     ap.add_argument("--seed", type=int, default=42)
-    args = ap.parse_args()
+    # neues Argument
+    ap.add_argument("--max_rot_deg", type=float, default=35.0,
+                    help="Maximal erlaubte Abweichung der Objektrotation in Grad (Standard: 35°)")
 
+    args = ap.parse_args()
     set_seed(args.seed)
 
     def parse_pose(s):
@@ -390,6 +405,10 @@ def main():
 
 
     start_pose=parse_pose(args.start_obj)
+    # Startrotation speichern
+    T_start = posevec_to_T(start_pose)
+    R_start = R.from_matrix(T_start[:3,:3])
+
     goal_pose=parse_pose(args.goal_obj)
 
     if args.bounds:
@@ -435,13 +454,15 @@ def main():
     # --- Pre-Check Start/Goal ---
     space = ob.SE3StateSpace()
     si_tmp = ob.SpaceInformation(space)  # nur für State-Objekterzeugung
-    checker_fn = DualArmOMPLChecker(ik_left, ik_right, checker, T_obj_left_off, T_obj_right_off)
+    checker_fn = DualArmOMPLChecker(
+        ik_left, ik_right, checker, 
+        T_obj_left_off, T_obj_right_off, R_start, max_rot_angle=np.deg2rad(args.max_rot_deg))
 
     def mk_state_from_pose(pose):
         s = ob.State(space)
         s().setX(pose[0]); s().setY(pose[1]); s().setZ(pose[2])
-        s().rotation().x = pose[6]; s().rotation().y = pose[4]
-        s().rotation().z = pose[5]; s().rotation().w = pose[3]
+        s().rotation().x = pose[4]; s().rotation().y = pose[5]
+        s().rotation().z = pose[6]; s().rotation().w = pose[3]
         return s
 
     start_state = mk_state_from_pose(start_pose)
@@ -473,8 +494,9 @@ def main():
     t0=time()
     path = plan_with_ompl(start_pose, goal_pose, bounds,
                           ik_left, ik_right, checker,
-                          T_obj_left_off, T_obj_right_off,
-                          time_limit=args.time_limit, simplify=True)
+                          T_obj_left_off, T_obj_right_off, R_start,
+                          time_limit=args.time_limit, simplify=True,
+                          max_rot_deg=args.max_rot_deg)
     dt=time()-t0
 
     if path is None:

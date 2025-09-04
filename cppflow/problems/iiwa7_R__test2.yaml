@@ -1,16 +1,16 @@
-robot: "iiwa7_L"
-path_name: "run1_ee_left"
+robot: "iiwa7_R"
+path_name: "run2_ee_right"
 
 path_offset_frame: "world"
 path_xyz_offset: [0, 0, 0]
 path_R_offset: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
 
-obstacle_xyz_offset: [1.26, -0.3, 1]
+obstacle_xyz_offset: [1, -0.3, 1]
 obstacles:
     [
         [
-            size_x: 0.5,
-            size_y: 0.5,
+            size_x: 0.1,
+            size_y: 0.1,
             size_z: 0.05,
             x: 0.0,
             y: 0.0,
