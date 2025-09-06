@@ -1,0 +1,22 @@
+robot: "iiwa7_L"
+path_name: "regal_links"
+
+path_offset_frame: "world"
+path_xyz_offset: [0, 0, 0]
+path_R_offset: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+
+obstacle_xyz_offset: [1.3, -0.1, 1]
+obstacles:
+    [
+        [
+            size_x: 0.5,
+            size_y: 0.5,
+            size_z: 0.05,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            roll: 0.0,
+            pitch: 0.0,
+            yaw: 0,
+        ],
+    ]

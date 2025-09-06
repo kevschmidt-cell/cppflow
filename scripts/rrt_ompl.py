@@ -5,10 +5,10 @@ python scripts/rrt_ompl.py \
   --urdf_left urdfs/iiwa7_L/iiwa7_L_updated.urdf \
   --urdf_right urdfs/iiwa7_R/iiwa7_R_updated.urdf \
   --urdf_object urdfs/object/se3_object.urdf \
-  --urdf_obstacles "urdfs/obstacle/obstacle.urdf" \
-  --start_obj "1,-0.5,0.9,1,0,0,0" \
-  --goal_obj  "1,-0.3,1.1,1,0,0,0" \
-  --bounds "0.8,1.2,-0.6,-0.2,0.8,1.2" \
+  --urdf_obstacles "urdfs/obstacle/saeule.urdf" \
+  --start_obj "1.0,-0.5,1,1,0,0,0.15" \
+  --goal_obj  "1.0, 0.3,1,1,0,0,0.15" \
+  --bounds "0.9,1.3,-0.5,0.3,0.6,1.6" \
   --time_limit 40 \
   --max_rot_deg 35 \
   --save_prefix run1
