@@ -5,11 +5,11 @@ python scripts/rrt_ompl.py \
   --urdf_left urdfs/iiwa7_L/iiwa7_L_updated.urdf \
   --urdf_right urdfs/iiwa7_R/iiwa7_R_updated.urdf \
   --urdf_object urdfs/object/se3_object.urdf \
-  --urdf_obstacles "urdfs/obstacle/saeule.urdf" \
-  --start_obj "1.0,-0.5,1,1,0,0,0.15" \
-  --goal_obj  "1.0, 0.3,1,1,0,0,0.15" \
-  --bounds "0.9,1.3,-0.5,0.3,0.6,1.6" \
-  --time_limit 40 \
+  --urdf_obstacles "urdfs/obstacle/obstacle.urdf" \
+  --start_obj "1.1,0.0,0.8,1,0,0,0" \
+  --goal_obj  "1.1,0.0,1.2,1,0,0,0" \
+  --bounds "0.65,1.1,-0.2,0.2,0.6,1.5" \
+  --time_limit 60 \
   --max_rot_deg 35 \
   --save_prefix run1
 """
@@ -272,12 +272,13 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
     si = ob.SpaceInformation(space)
     si.setStateValidityChecker(ob.StateValidityCheckerFn(
         DualArmOMPLChecker(ik_left, ik_right, checker, T_obj_left_off, T_obj_right_off,
-                           R_start,max_rot_angle=np.deg2rad(max_rot_deg))
+                           R_start, max_rot_angle=np.deg2rad(max_rot_deg))
     ))
-    # etwas gröbere Auflösung spart IK-Aufrufe; bei Bedarf feiner machen (z.B. 0.01)
+    # etwas gröbere Auflösung spart IK-Aufrufe; bei Bedarf feiner machen (z. B. 0.01)
     si.setStateValidityCheckingResolution(0.02)
     si.setup()
 
+    # Startzustand
     start = ob.State(space)
     start().setX(start_pose[0])
     start().setY(start_pose[1])
@@ -287,6 +288,7 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
     start().rotation().z = start_pose[6]
     start().rotation().w = start_pose[3]
 
+    # Zielzustand
     goal = ob.State(space)
     goal().setX(goal_pose[0])
     goal().setY(goal_pose[1])
@@ -296,15 +298,21 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
     goal().rotation().z = goal_pose[6]
     goal().rotation().w = goal_pose[3]
 
-
+    # Problemdefinition
     pdef = ob.ProblemDefinition(si)
-    # Toleranz für Goal (Position ~1cm, Rotation ~2°)
-    goal_tolerance = 0.01
+    goal_tolerance = 0.01  # Position ~1 cm, Rotation ~2°
     pdef.setStartAndGoalStates(start, goal, goal_tolerance)
 
-    planner = og.RRTConnect(si)
+    pdef.setOptimizationObjective(
+        ob.PathLengthOptimizationObjective(si)
+    )
+    # --- RRT* statt RRTConnect ---
+    planner = og.RRTstar(si)
     if range_hint is not None:
-        planner.setRange(float(range_hint))
+        planner.setRange(float(range_hint))   # maximale Schrittweite
+    planner.setGoalBias(0.05)                 # Wahrscheinlichkeit direkt Richtung Ziel
+    planner.setRewireFactor(1.1)              # Standardwert
+    
     planner.setProblemDefinition(pdef)
     planner.setup()
 
@@ -315,12 +323,13 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
     path_geom = pdef.getSolutionPath()
     if simplify:
         og.PathSimplifier(si).simplifyMax(path_geom)
+
     # dynamische Interpolation: z. B. alle 0.01 m ein Wegpunkt
     resolution = 0.01  # 1 cm
     n_states = int(path_geom.length() / resolution)
-
     if n_states > 0:
         path_geom.interpolate(n_states)
+
     # States -> Posevec (x,y,z, qw,qx,qy,qz)
     out = []
     for s in path_geom.getStates():
@@ -328,6 +337,7 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
         r = s.rotation()
         out.append([*xyz, r.w, r.x, r.y, r.z])
     return out
+
 
 
 def visualize_path_animated(world, robot_left, robot_right, obj, path, T_obj_left_off, T_obj_right_off, dt=0.05):
