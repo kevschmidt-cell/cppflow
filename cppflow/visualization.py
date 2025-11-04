@@ -832,91 +832,112 @@ def visualize_plan(plan: Plan, problem: Problem, time_p_loop: float = 0.1, start
 
     vis.kill()
 
-import numpy as np
-from klampt import vis
-from klampt.math import so3
-
-from time import sleep
-from cppflow.utils import to_numpy
-
 def visualize_dual_plan(plan_left, problem_left,
                         plan_right, problem_right,
-                        time_p_loop: float = 0.03, start_delay: float = 3.0):
+                        time_p_loop: float = 0.03,
+                        start_delay: float = 3.0):
     """
-    Visualisiert einen Dual-Arm-Plan in Klampt. Kompatibel mit PlannerResult, wandelt Torch-Tensoren in NumPy um.
+    Visualisiert einen Dual-Arm-Plan in Klampt, inklusive Endeffektortrajektorien und Koordinatensystemen.
     """
-    print(dir(plan_left))
-    print(plan_left.__dict__)
-    print(dir(plan_left.plan))
-    print(plan_left.plan.__dict__)
-
-    # --- q_path und pose_path extrahieren ---
-    def to_numpy(x):
+    # Torch → NumPy
+    def to_np(x):
         import torch
         if torch.is_tensor(x):
             return x.cpu().numpy()
         return np.array(x)
 
-    q_path_left = to_numpy(plan_left.plan.q_path)
-    q_path_right = to_numpy(plan_right.plan.q_path)
-
-    pose_path_left = to_numpy(plan_left.pose_path) if hasattr(plan_left, "pose_path") else None
-    pose_path_right = to_numpy(plan_right.pose_path) if hasattr(plan_right, "pose_path") else None
+    q_path_left = to_np(plan_left.plan.q_path)
+    q_path_right = to_np(plan_right.plan.q_path)
+    pose_path_left = to_np(plan_left.pose_path) if hasattr(plan_left, "pose_path") else None
+    pose_path_right = to_np(plan_right.pose_path) if hasattr(plan_right, "pose_path") else None
 
     robot_left = problem_left.robot
     robot_right = problem_right.robot
-
-    # Hintergrundfarbe
     background_color = (1, 1, 1, 0.7)
 
-    # ---- Floor grid ----
+    # --- Bodenraster ---
     size = 3
     for x0 in range(-size, size + 1):
         for y0 in range(-size, size + 1):
             vis.add(
                 f"floor_{x0}_{y0}_x",
                 trajectory.Trajectory([1, 0], [(-size, y0, 0), (size, y0, 0)]),
-                color=(0.75, 0.75, 0.75, 1.0),
-                width=2.0,
+                color=(0.8, 0.8, 0.8, 1.0),
+                width=1.5,
                 hide_label=True,
-                pointSize=0,
             )
             vis.add(
                 f"floor_{x0}_{y0}_y",
                 trajectory.Trajectory([1, 0], [(x0, -size, 0), (x0, size, 0)]),
-                color=(0.75, 0.75, 0.75, 1.0),
-                width=2.0,
+                color=(0.8, 0.8, 0.8, 1.0),
+                width=1.5,
                 hide_label=True,
-                pointSize=0,
             )
 
-    # Roboter hinzufügen
+    # --- Roboter hinzufügen ---
     vis.add("world_left", robot_left.klampt_world_model)
     vis.add("world_right", robot_right.klampt_world_model)
 
     vis.setBackgroundColor(*background_color)
     vis.resizeWindow(1600, 1200)
     vis.setWindowTitle("Dual-arm plan visualization")
+
+    # --- Zieltrajektorien visualisieren (rote Linien) ---
+    if hasattr(problem_left, "target_path"):
+        vis.add(
+            "path_left",
+            trajectory.Trajectory(
+                [1, 0],
+                [wp[0:3] for wp in to_numpy(problem_left.target_path)]
+            ),
+            color=(1.0, 0.0, 0.0, 1.0),
+            width=3.0,
+            hide_label=True,
+            pointSize=1,
+        )
+
+    if hasattr(problem_right, "target_path"):
+        vis.add(
+            "path_right",
+            trajectory.Trajectory(
+                [1, 0],
+                [wp[0:3] for wp in to_numpy(problem_right.target_path)]
+            ),
+            color=(0.0, 0.0, 1.0, 1.0),
+            width=3.0,
+            hide_label=True,
+            pointSize=1,
+        )
+
     vis.show()
 
-    # Startkonfiguration setzen
+    # --- Startkonfiguration setzen ---
     robot_left.set_klampt_robot_config(q_path_left[0])
     robot_right.set_klampt_robot_config(q_path_right[0])
-    delay(start_delay)
+    sleep(start_delay)
 
-    # ---- Animationsschleife ----
+    # --- Funktion zum Anzeigen der Endeffektoren ---
+    def update_end_effector(pose, name, color=(0, 0, 0)):
+        if pose is None:
+            return
+        R = so3.from_quaternion(pose[3:7])
+        t = pose[0:3]
+        vis.add(name, (R, t), length=0.15, width=0.01, fancy=False)
+
+    # --- Animationsschleife ---
     i = 0
     while vis.shown():
         vis.lock()
         if i < len(q_path_left) and i < len(q_path_right):
-            robot_left.set_klampt_robot_config(q_path_left[i])
-            robot_right.set_klampt_robot_config(q_path_right[i])
+            qL = q_path_left[i]
+            qR = q_path_right[i]
+            robot_left.set_klampt_robot_config(qL)
+            robot_right.set_klampt_robot_config(qR)
 
-            # Optional: Endeffektoren aktualisieren, falls pose_path vorhanden
-            if pose_path_left is not None and pose_path_right is not None:
-                # update_end_effector_tf(pose_path_left[i], "end_eff_left")
-                # update_end_effector_tf(pose_path_right[i], "end_eff_right")
-                pass
+            if pose_path_left is not None:
+                update_end_effector(pose_path_left[i], "ee_left", color=(1, 0, 0))
+            if pose_path_right is not None:
+                update_end_effector(pose_path_right[i], "ee_right", color=(0, 0, 1))
 
             i += 1
         vis.unlock()

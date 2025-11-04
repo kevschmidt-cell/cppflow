@@ -295,6 +295,6 @@ python scripts/debug_dual_arm_pose.py \
     --urdf_left urdfs/iiwa7_L/iiwa7_L_updated.urdf \
     --urdf_right urdfs/iiwa7_R/iiwa7_R_updated.urdf \
     --urdf_object urdfs/object/se3_object.urdf \
-    --pose "1,-0.1,0.9,1,0,0,0"
+    --pose "1,0.0,0.9,1,0,0,0"
 
 """

@@ -23,16 +23,6 @@ python scripts/plan_dualarm_rrt.py \
 """
 
 #!/usr/bin/env python3
-"""
-plan_dualarm_rrt_with_obstacles.py
-
-Dual-arm RRT in object-pose space (x,y,z,qw,qx,qy,qz) mit Hindernissen.
-- Lädt linken Arm, rechten Arm und Objekt (als RigidObject) in eine Klampt-Welt.
-- Grasp-Offsets aus Objekt-URDF (obj_com -> obj_p_01 / obj_p_02).
-- IK per IKFlow.
-- Kollisionen per Klampt WorldCollider:
-    left arm <-> obstacles, right arm <-> obstacles, object <-> obstacles.
-"""
 
 import argparse, os, sys, xml.etree.ElementTree as ET
 from time import time
