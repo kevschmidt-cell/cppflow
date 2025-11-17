@@ -40,8 +40,8 @@ ROBOT_TO_IKFLOW_MODEL = {
     FetchArm.name: "fetch_arm__large__mh186_9.25m",
     # --- Iiwa7
     Iiwa7.name: "iiwa7__full__lp191_5.25m",
-    Iiwa7_L.name: "iiwa7_left_arm_0.75m",
-    Iiwa7_R.name: "iiwa7_right_arm_0.1m",
+    Iiwa7_L.name: "iiwa7_left_arm",
+    Iiwa7_R.name: "iiwa7_right_arm",
 }
 
 MOCK_IKFLOW_PARAMS = IkflowModelParameters()

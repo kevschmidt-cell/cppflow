@@ -1,13 +1,13 @@
 """
 python scripts/rrt_ompl.py \
-  --ik_left_model iiwa7_left_arm_0.75m\
+  --ik_left_model iiwa7_left_arm\
   --ik_right_model iiwa7_right_arm_0.1m \
   --urdf_left urdfs/iiwa7_L/iiwa7_L_updated.urdf \
   --urdf_right urdfs/iiwa7_R/iiwa7_R_updated.urdf \
   --urdf_object urdfs/object/se3_object.urdf \
   --urdf_obstacles "urdfs/obstacle/obstacle.urdf" \
-  --start_obj "0.9,0.0,0.8,1,0,0,0" \
-  --goal_obj  "0.9,0.0,1.2,1,0,0,0" \
+  --start_obj "0.8,0.0,1.1,1,0,0,0" \
+  --goal_obj  "1.1,0.0,1.1,1,0,0,0" \
   --bounds "0.65,1.1,-0.2,0.2,0.6,1.5" \
   --time_limit 10 \
   --max_rot_deg 35 \

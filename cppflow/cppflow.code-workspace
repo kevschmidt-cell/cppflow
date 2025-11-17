@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../dev/ikflow"
+		},
+		{
+			"path": "../../dev/jrl"
+		}
+	],
+	"settings": {}
+}

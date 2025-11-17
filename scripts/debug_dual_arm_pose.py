@@ -290,8 +290,8 @@ if __name__=="__main__":
 
 """
 python scripts/debug_dual_arm_pose.py \
-    --ik_left_model iiwa7_left_arm_0.75m \
-    --ik_right_model iiwa7_right_arm_0.1m \
+    --ik_left_model iiwa7_left_arm \
+    --ik_right_model iiwa7_right_arm \
     --urdf_left urdfs/iiwa7_L/iiwa7_L_updated.urdf \
     --urdf_right urdfs/iiwa7_R/iiwa7_R_updated.urdf \
     --urdf_object urdfs/object/se3_object.urdf \
