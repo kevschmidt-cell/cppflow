@@ -1,7 +1,7 @@
-robot:     "iiwa7"
+robot:     "iiwa7_N"
 path_name: "hello"
 
-path_offset_frame: "square"
+path_offset_frame: "world"
 path_xyz_offset: [0.75, 0, 0.5]
 path_R_offset: [
   [0,  0, 1],

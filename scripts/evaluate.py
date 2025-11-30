@@ -18,8 +18,15 @@ from cppflow.config import DEVICE, SELF_COLLISIONS_IGNORED, ENV_COLLISIONS_IGNOR
 from cppflow.visualization import visualize_plan, plot_plan
 from cppflow.collision_detection import qpaths_batched_self_collisions, qpaths_batched_env_collisions
 
+
 torch.set_printoptions(linewidth=120)
 set_seed()
+
+# Choose device here once, and propagate into cppflow.config so other modules use it
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", DEVICE)
+import cppflow.config as _cf
+_cf.DEVICE = DEVICE
 
 PLANNERS = {
     "CppFlow": CppFlowPlanner,
@@ -55,6 +62,16 @@ CONSTRAINTS = Constraints(
     max_allowed_mjac_cm=2.0,  # from the paper
 )
 
+def debug_self_collisions(problem: Problem, qs: torch.Tensor):
+    """
+    Berechnet und druckt die Self-Collision-Rate für gegebene IKFlow Pfade.
+    qs: [k x n_timesteps x ndof]
+    """
+
+    violations = qpaths_batched_self_collisions(problem, qs)
+    pct_colliding = (torch.sum(violations) / violations.numel()).item() * 100
+    print(f"[DEBUG] Self-colliding configs: {pct_colliding:.2f}%")
+    return pct_colliding
 
 def _eval_planner_on_problem(planner: Type[Planner], problem: Problem, planner_settings: PlannerSettings):
     result = planner.generate_plan(problem, planner_settings)
@@ -238,7 +255,7 @@ uv run python scripts/evaluate.py --all_2 --save_to_benchmarking
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__circle --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__hello --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__rot_yz --visualize
-uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__rot_yz2 --visualize
+uv run python scripts/evaluate.py --planner CppFlow --problem=iiwa7_L__column --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__s --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__square --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch__circle --visualize

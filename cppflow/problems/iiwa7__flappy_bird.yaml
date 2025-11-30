@@ -1,4 +1,4 @@
-robot: "iiwa7"
+robot: "iiwa7_N"
 path_name: "flappy_bird"
 
 path_offset_frame: "world"
