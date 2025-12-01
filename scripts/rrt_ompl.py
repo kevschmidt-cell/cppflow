@@ -38,7 +38,49 @@ from klampt.math import se3
 from klampt.robotsim import RobotModelLink, RigidObjectModel
 
 
+def rpy_to_matrix(roll, pitch, yaw):
+    cr, sr = np.cos(roll),  np.sin(roll)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cy, sy = np.cos(yaw),   np.sin(yaw)
 
+    Rz = np.array([[cy, -sy, 0],
+                   [sy,  cy, 0],
+                   [ 0,   0, 1]])
+
+    Ry = np.array([[ cp, 0, sp],
+                   [  0, 1,  0],
+                   [-sp, 0, cp]])
+
+    Rx = np.array([[1, 0,  0],
+                   [0, cr, -sr],
+                   [0, sr,  cr]])
+
+    return Rz @ Ry @ Rx
+
+xyz = np.array([0.3682, -0.1842, 0.7014])
+rpy = np.array([0.0039, -0.0030, -0.0161])
+
+xyz_R = np.array([0.3743, 0.1816, 0.7048])
+rpy_R = np.array([-0.0012, 0.0001, -0.0158])
+R_L = rpy_to_matrix(*rpy)
+R_R = rpy_to_matrix(*rpy_R)
+
+T_world_left = np.eye(4)
+T_world_left[:3,:3] = R_L
+T_world_left[:3, 3] = xyz
+
+T_world_right = np.eye(4)
+T_world_right[:3,:3] = R_R
+T_world_right[:3, 3] = xyz_R
+
+ROBOT_TO_BASE_TRANSFORM = {
+    # example (identity = no base offset)
+    "iiwa7": np.eye(4),
+    "iiwa7_L": np.eye(4),
+    #iiwa7_L": T_world_left, 
+    "iiwa7_R": np.linalg.inv(T_world_left) @ T_world_right, 
+    "iiwa7_N": np.eye(4),
+}
 def normalize_quat(w,x,y,z):
     q = np.array([w,x,y,z], dtype=float)
     n = np.linalg.norm(q)
@@ -215,15 +257,15 @@ class DualArmCollisionChecker:
 # OMPL State Validity Checker
 # ---------------------------
 class DualArmOMPLChecker:
-    def __init__(self, ik_left, ik_right, checker, T_obj_left_off, T_obj_right_off,
-                 R_start, max_rot_angle=np.deg2rad(35)):
+    def __init__(self, ik_left, checker, T_obj_left_off, T_obj_right_off,
+                 R_start, max_rot_angle=np.deg2rad(35), base_offset_right=np.eye(4)):
         self.ik_left = ik_left
-        self.ik_right = ik_right
         self.checker = checker
         self.T_obj_left_off = T_obj_left_off
         self.T_obj_right_off = T_obj_right_off
         self.R_start = R_start
         self.max_rot_angle = max_rot_angle
+        self.base_offset_right = base_offset_right
 
     def __call__(self, state):
         # Extrahiere Objektpose aus SE3-State
@@ -242,10 +284,14 @@ class DualArmOMPLChecker:
 
         # IK für beide Arme (eine Lösung genügt)
         pose_left  = T_to_posevec(T_obj @ self.T_obj_left_off)
-        pose_right = T_to_posevec(T_obj @ self.T_obj_right_off)
+
+        T_ee_right_leftbasis = T_obj @ self.T_obj_right_off
+        T_ee_right = np.linalg.inv(self.base_offset_right) @ T_ee_right_leftbasis
+        pose_right = T_to_posevec(T_ee_right)
+
         okL, qL = batch_ik_and_filter(self.ik_left,  [pose_left])[0]
         if not okL: return False
-        okR, qR = batch_ik_and_filter(self.ik_right, [pose_right])[0]
+        okR, qR = batch_ik_and_filter(self.ik_left, [pose_right])[0]
         if not okR: return False
 
         qL_full = expand_q_to_full(self.checker.left, qL)
@@ -257,7 +303,7 @@ class DualArmOMPLChecker:
 # ---------------------------
 # OMPL Planung
 # ---------------------------
-def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
+def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, checker,
                    T_obj_left_off, T_obj_right_off, R_start,
                    time_limit=60.0, simplify=True, range_hint=None, max_rot_deg=35):
     space = ob.SE3StateSpace()
@@ -271,8 +317,8 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, ik_right, checker,
 
     si = ob.SpaceInformation(space)
     si.setStateValidityChecker(ob.StateValidityCheckerFn(
-        DualArmOMPLChecker(ik_left, ik_right, checker, T_obj_left_off, T_obj_right_off,
-                           R_start, max_rot_angle=np.deg2rad(max_rot_deg))
+        DualArmOMPLChecker(ik_left, checker, T_obj_left_off, T_obj_right_off,
+                           R_start, max_rot_angle=np.deg2rad(max_rot_deg), base_offset_right=ROBOT_TO_BASE_TRANSFORM["iiwa7_R"])
     ))
     # etwas gröbere Auflösung spart IK-Aufrufe; bei Bedarf feiner machen (z. B. 0.01)
     si.setStateValidityCheckingResolution(0.02)
@@ -386,7 +432,7 @@ def visualize_path_animated(world, robot_left, robot_right, obj, path, T_obj_lef
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ik_left_model", required=True)
-    ap.add_argument("--ik_right_model", required=True)
+    #ap.add_argument("--ik_right_model", required=True)
     ap.add_argument("--urdf_left", required=True)
     ap.add_argument("--urdf_right", required=True)
     ap.add_argument("--urdf_object", required=True)
@@ -433,10 +479,11 @@ def main():
 
     print(">> IKFlow-Modelle laden …")
     ik_left,_  = get_ik_solver(args.ik_left_model)
-    ik_right,_ = get_ik_solver(args.ik_right_model)
+    #ik_right,_ = get_ik_solver(args.ik_right_model)
 
     print(">> Objekt-URDF Offsets/Mesh …")
     T_obj_left_off, T_obj_right_off, obj_mesh_abs = parse_object_urdf_for_offsets_and_mesh(args.urdf_object)
+    base_offset_right = ROBOT_TO_BASE_TRANSFORM["iiwa7_R"]
 
     print(">> Klampt Welt …")
     world=WorldModel()
@@ -465,8 +512,9 @@ def main():
     space = ob.SE3StateSpace()
     si_tmp = ob.SpaceInformation(space)  # nur für State-Objekterzeugung
     checker_fn = DualArmOMPLChecker(
-        ik_left, ik_right, checker, 
-        T_obj_left_off, T_obj_right_off, R_start, max_rot_angle=np.deg2rad(args.max_rot_deg))
+        ik_left, checker, 
+        T_obj_left_off, T_obj_right_off, R_start, max_rot_angle=np.deg2rad(args.max_rot_deg),
+        base_offset_right=ROBOT_TO_BASE_TRANSFORM["iiwa7_R"])
 
     def mk_state_from_pose(pose):
         s = ob.State(space)
@@ -481,8 +529,10 @@ def main():
     def diagnose_pose(tag, pose):
         T_obj = posevec_to_T(pose)
         pose_left  = T_to_posevec(T_obj @ T_obj_left_off)
-        pose_right = T_to_posevec(T_obj @ T_obj_right_off)
-        (okL,qL),(okR,qR) = batch_ik_and_filter(ik_left,[pose_left])[0], batch_ik_and_filter(ik_right,[pose_right])[0]
+        T_ee_right_leftbasis = T_obj @ T_obj_right_off
+        T_ee_right = np.linalg.inv(base_offset_right) @ T_ee_right_leftbasis
+        pose_right = T_to_posevec(T_ee_right)
+        (okL,qL),(okR,qR) = batch_ik_and_filter(ik_left,[pose_left])[0], batch_ik_and_filter(ik_left,[pose_right])[0]
         print(f"[CHECK] {tag}: IK_L={okL}, IK_R={okR}")
         if not okL or not okR:
             return False
@@ -503,7 +553,7 @@ def main():
     print(">> OMPL-Planung startet …")
     t0=time()
     path = plan_with_ompl(start_pose, goal_pose, bounds,
-                          ik_left, ik_right, checker,
+                          ik_left, checker,
                           T_obj_left_off, T_obj_right_off, R_start,
                           time_limit=args.time_limit, simplify=True,
                           max_rot_deg=args.max_rot_deg)
@@ -529,7 +579,7 @@ def main():
 
     # IK entlang des Pfades (je 1 Lösung pro Wegpunkt)
     resL = batch_ik_and_filter(ik_left, poses_left)
-    resR = batch_ik_and_filter(ik_right, poses_right)
+    resR = batch_ik_and_filter(ik_left, poses_right)
 
     qL_list=[]; qR_list=[]
     for (okL,qL),(okR,qR) in zip(resL,resR):
@@ -560,7 +610,6 @@ def main():
 
     print("Fertig.")
     visualize_path_animated(world, robot_left, robot_right, obj, path, T_obj_left_off, T_obj_right_off, dt=0.05)
-
 
 if __name__=="__main__":
     main()

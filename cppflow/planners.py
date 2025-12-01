@@ -100,7 +100,7 @@ ROBOT_TO_BASE_TRANSFORM = {
     "iiwa7": np.eye(4),
     "iiwa7_L": np.eye(4),
     #iiwa7_L": T_world_left, 
-    "iiwa7_R": np.linalg.inv(T_world_left) @ T_world_right, #<- hilf mir hier
+    "iiwa7_R": np.linalg.inv(T_world_left) @ T_world_right, 
     "iiwa7_N": np.eye(4),
 }
 def pose7_to_mat(pose7: torch.Tensor) -> torch.Tensor:
@@ -287,7 +287,6 @@ def add_search_path_mjac(debug_info: Dict, problem: Problem, qpath_search: torch
     debug_info["search_path_min_dist_to_jlim_cm"] = search_path_min_dist_to_jlim_cm
     debug_info["search_path_min_dist_to_jlim_deg"] = search_path_min_dist_to_jlim_deg
 
-
 class Planner:
     def __init__(self, settings: PlannerSettings, robot: Robot, is_mock: bool = False):
         if not is_mock:
@@ -437,7 +436,6 @@ class Planner:
         ee_path_for_ikflow = torch.stack([
             mat_to_pose7(base_T_inv @ pose7_to_mat(p)) for p in problem.target_path
         ])
-
 
         # --- Run IKFlow ---
         ikflow_qpaths = self._get_k_ikflow_qpaths(ee_path_for_ikflow, batched_latents, k)

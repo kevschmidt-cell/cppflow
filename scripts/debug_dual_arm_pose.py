@@ -11,6 +11,49 @@ import torch
 from plan_dualarm_rrt import parse_object_urdf_for_offsets_and_mesh
 set_seed(42)
 
+def rpy_to_matrix(roll, pitch, yaw):
+    cr, sr = np.cos(roll),  np.sin(roll)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cy, sy = np.cos(yaw),   np.sin(yaw)
+
+    Rz = np.array([[cy, -sy, 0],
+                   [sy,  cy, 0],
+                   [ 0,   0, 1]])
+
+    Ry = np.array([[ cp, 0, sp],
+                   [  0, 1,  0],
+                   [-sp, 0, cp]])
+
+    Rx = np.array([[1, 0,  0],
+                   [0, cr, -sr],
+                   [0, sr,  cr]])
+
+    return Rz @ Ry @ Rx
+
+xyz = np.array([0.3682, -0.1842, 0.7014])
+rpy = np.array([0.0039, -0.0030, -0.0161])
+
+xyz_R = np.array([0.3743, 0.1816, 0.7048])
+rpy_R = np.array([-0.0012, 0.0001, -0.0158])
+R_L = rpy_to_matrix(*rpy)
+R_R = rpy_to_matrix(*rpy_R)
+
+T_world_left = np.eye(4)
+T_world_left[:3,:3] = R_L
+T_world_left[:3, 3] = xyz
+
+T_world_right = np.eye(4)
+T_world_right[:3,:3] = R_R
+T_world_right[:3, 3] = xyz_R
+
+ROBOT_TO_BASE_TRANSFORM = {
+    # example (identity = no base offset)
+    "iiwa7": np.eye(4),
+    "iiwa7_L": np.eye(4),
+    #iiwa7_L": T_world_left, 
+    "iiwa7_R": np.linalg.inv(T_world_left) @ T_world_right, 
+    "iiwa7_N": np.eye(4),
+}
 # ---------------------------
 # Transform-Helfer
 # ---------------------------
@@ -179,11 +222,12 @@ def visualize_pose2(wc, ik_left, ik_right, T_obj, T_left_offset, T_right_offset,
     T_right_global = T_obj @ T_right_offset
 
     left_pose_vec = T_to_posevec(T_left_global)
-    right_pose_vec = T_to_posevec(T_right_global)
 
+    T_ee_right = np.linalg.inv(ROBOT_TO_BASE_TRANSFORM["iiwa7_R"]) @ T_right_global
+    pose_right = T_to_posevec(T_ee_right)
     # Multi-IK
     left_sols = batch_ik_and_filter_multi(ik_left, [left_pose_vec], n_solutions=n_ik_solutions)[0]
-    right_sols = batch_ik_and_filter_multi(ik_right, [right_pose_vec], n_solutions=n_ik_solutions)[0]
+    right_sols = batch_ik_and_filter_multi(ik_right, [pose_right], n_solutions=n_ik_solutions)[0]
 
     if not left_sols or not right_sols:
         print("⚠️ Keine gültige IK gefunden")
@@ -261,7 +305,6 @@ def visualize_pose(wc, ik_left, ik_right, T_obj, T_left_offset, T_right_offset):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ik_left_model", required=True)
-    parser.add_argument("--ik_right_model", required=True)
     parser.add_argument("--urdf_left", required=True)
     parser.add_argument("--urdf_right", required=True)
     parser.add_argument("--urdf_object", required=True)
@@ -276,7 +319,7 @@ def main():
 
     # IK Solver laden
     ik_left, _ = get_ik_solver(args.ik_left_model)
-    ik_right, _ = get_ik_solver(args.ik_right_model)
+    ik_right = ik_left
 
     # Welt initialisieren
     wc = WorldCollision(args.urdf_left, args.urdf_right, args.urdf_object)
@@ -291,7 +334,6 @@ if __name__=="__main__":
 """
 python scripts/debug_dual_arm_pose.py \
     --ik_left_model iiwa7_left_arm \
-    --ik_right_model iiwa7_right_arm \
     --urdf_left urdfs/iiwa7_L/iiwa7_L_updated.urdf \
     --urdf_right urdfs/iiwa7_R/iiwa7_R_updated.urdf \
     --urdf_object urdfs/object/se3_object.urdf \
