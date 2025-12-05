@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<robot name="obstacle">
+<robot name="saeule">
     <link name="world"/>
     <joint name="world_to_obstacle" type="fixed">
-        <origin xyz="5.2 0 1.0" rpy="0 0 0"/>
+        <origin xyz="0.9 0.0 1.4" rpy="0 0 0"/>
         <parent link="world"/> <!-- oder ganz weglassen, je nach Loader -->
         <child link="obstacle_box"/>
     </joint>
@@ -10,7 +10,7 @@
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0"/>
             <geometry>
-                <box size="0.5 0.5 0.05"/> <!-- Breite, Tiefe, Höhe -->
+                <box size="0.05 0.05 0.4"/> <!-- Breite, Tiefe, Höhe -->
             </geometry>
             <material name="gray">
                 <color rgba="0.5 0.5 0.5 1.0"/>
@@ -19,9 +19,8 @@
         <collision>
             <origin rpy="0 0 0" xyz="0 0 0"/>
             <geometry>
-                <box size="0.5 0.5 0.05"/>
+                <box size="0.05 0.05 0.4"/>
             </geometry>
         </collision>
     </link>
 </robot>
-

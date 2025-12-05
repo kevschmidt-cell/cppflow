@@ -1,0 +1,6 @@
+run,success,n_waypoints,runtime_s,save_prefix
+1,False,0,6.803506851196289,run1
+2,False,0,5.7349913120269775,run2
+3,False,0,5.7073118686676025,run3
+4,False,0,5.818088054656982,run4
+5,False,0,5.550756216049194,run5

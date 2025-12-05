@@ -216,7 +216,7 @@ def setup_visualization(world):
     vis.add("world", world)
     vis.show()
 
-def visualize_pose2(wc, ik_left, ik_right, T_obj, T_left_offset, T_right_offset, n_ik_solutions=10000):
+def visualize_pose2(wc, ik_left, ik_right, T_obj, T_left_offset, T_right_offset, n_ik_solutions=1):
     # Ziel-Trafos
     T_left_global = T_obj @ T_left_offset
     T_right_global = T_obj @ T_right_offset

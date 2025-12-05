@@ -255,7 +255,7 @@ uv run python scripts/evaluate.py --all_2 --save_to_benchmarking
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__circle --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__hello --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__rot_yz --visualize
-uv run python scripts/evaluate.py --planner CppFlow --problem=iiwa7_L__column --visualize
+uv run python scripts/evaluate.py --planner CppFlow --problem=iiwa7_L__column2 --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__s --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch_arm__square --visualize
 uv run python scripts/evaluate.py --planner CppFlow --problem=fetch__circle --visualize

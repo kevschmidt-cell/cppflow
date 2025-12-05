@@ -1,13 +1,12 @@
 """
 python scripts/rrt_ompl.py \
   --ik_left_model iiwa7_left_arm\
-  --ik_right_model iiwa7_right_arm_0.1m \
   --urdf_left urdfs/iiwa7_L/iiwa7_L_updated.urdf \
   --urdf_right urdfs/iiwa7_R/iiwa7_R_updated.urdf \
   --urdf_object urdfs/object/se3_object.urdf \
-  --urdf_obstacles "urdfs/obstacle/obstacle.urdf" \
-  --start_obj "0.8,0.0,1.1,1,0,0,0" \
-  --goal_obj  "1.1,0.0,1.1,1,0,0,0" \
+  --urdf_obstacles "urdfs/obstacle/passage.urdf,urdfs/obstacle/passage2.urdf" \
+  --start_obj "1.05,0.0,0.9,1,0,0,0" \
+  --goal_obj  "0.8,0.0,0.9,1,0,0,0" \
   --bounds "0.65,1.1,-0.2,0.2,0.6,1.5" \
   --time_limit 10 \
   --max_rot_deg 35 \
@@ -37,6 +36,17 @@ from klampt.model import collide
 from klampt.math import se3
 from klampt.robotsim import RobotModelLink, RigidObjectModel
 
+# --- GLOBAL METRICS ---
+METRICS = {
+    "validity_checks": 0,
+    "ik_calls_left": 0,
+    "ik_calls_right": 0,
+    "ik_success_left": 0,
+    "ik_success_right": 0,
+    "collision_checks": 0,
+    "collisions_found": 0,
+    "path_length": 0.0,
+}
 
 def rpy_to_matrix(roll, pitch, yaw):
     cr, sr = np.cos(roll),  np.sin(roll)
@@ -213,26 +223,33 @@ class DualArmCollisionChecker:
       - Objekt       <-> Obstacles
     KEINE Arm-Arm- oder Arm-Objekt-Checks.
     """
-    def __init__(self, world, robot_left, robot_right, grasped_object, obstacles_robots):
+    def __init__(self, world, robot_left, robot_right, grasped_object, obstacles_robots,
+                 ignore_links_left=None, ignore_links_right=None, ignore_links_obstacles=None,
+                 check_object_vs_obstacles=True, collision_padding=0.0):
         self.world = world
         self.left = robot_left
         self.right = robot_right
         self.obj = grasped_object
         self.obstacles = obstacles_robots
+        self.ignore_links_left = set(ignore_links_left or [])
+        self.ignore_links_right = set(ignore_links_right or [])
+        self.ignore_links_obstacles = set(ignore_links_obstacles or [])
+        self.check_object_vs_obstacles = check_object_vs_obstacles
         self.cw = collide.WorldCollider(world)
 
         self.left_id = self.left.getID()
         self.right_id = self.right.getID()
         self.obs_ids = {r.getID() for r in self.obstacles}
         self.obj_id = self.obj.getID()
+        self.collision_padding = float(collision_padding)
 
-    def _is_links_of(self, robot_id):
+    def _is_links_of(self, robot_id, ignored):
         def f(o):
-            return isinstance(o, RobotModelLink) and o.robot().getID()==robot_id
+            return isinstance(o, RobotModelLink) and o.robot().getID()==robot_id and o.getName() not in ignored
         return f
 
     def _is_links_of_obstacles(self, o):
-        return isinstance(o, RobotModelLink) and (o.robot().getID() in self.obs_ids)
+        return isinstance(o, RobotModelLink) and (o.robot().getID() in self.obs_ids) and (o.getName() not in self.ignore_links_obstacles)
 
     def _is_the_object(self, o):
         return isinstance(o, RigidObjectModel) and (o.getID()==self.obj_id)
@@ -241,15 +258,26 @@ class DualArmCollisionChecker:
         Rm, t = T_to_se3(T_obj)
         self.obj.setTransform(Rm, t)
 
+    def _collides(self, f1, f2):
+        """Collision with optional negative padding (allow small penetrations)."""
+        if self.collision_padding <= 0.0:
+            return any(self.cw.collisions(f1, f2))
+        try:
+            d = self.cw.distance(f1, f2)
+            # distance < 0 => penetration; allow up to -padding before declaring collision
+            return d is not None and d < -self.collision_padding
+        except Exception:
+            return any(self.cw.collisions(f1, f2))
+
     def any_collision(self, qL_full, qR_full, T_obj):
         self.left.setConfig(qL_full)
         self.right.setConfig(qR_full)
         self.set_object_T(T_obj)
-        if any(self.cw.collisions(self._is_links_of(self.left_id), self._is_links_of_obstacles)):
+        if self._collides(self._is_links_of(self.left_id, self.ignore_links_left), self._is_links_of_obstacles):
             return True
-        if any(self.cw.collisions(self._is_links_of(self.right_id), self._is_links_of_obstacles)):
+        if self._collides(self._is_links_of(self.right_id, self.ignore_links_right), self._is_links_of_obstacles):
             return True
-        if any(self.cw.collisions(self._is_the_object, self._is_links_of_obstacles)):
+        if self.check_object_vs_obstacles and self._collides(self._is_the_object, self._is_links_of_obstacles):
             return True
         return False
 
@@ -268,44 +296,69 @@ class DualArmOMPLChecker:
         self.base_offset_right = base_offset_right
 
     def __call__(self, state):
+
+        # --- METRIC: validity checks ---
+        METRICS["validity_checks"] += 1
+
         # Extrahiere Objektpose aus SE3-State
         xyz = [state.getX(), state.getY(), state.getZ()]
         rot = state.rotation()
-        # OMPL Quaternion: (x,y,z,w)
-        quat = [rot.x, rot.y, rot.z, rot.w]
+        quat = [rot.x, rot.y, rot.z, rot.w]  # OMPL format
+
         T_obj = posevec_to_T([*xyz, quat[3], quat[0], quat[1], quat[2]])
 
         # Rotationsabweichung prüfen
-        R_curr = R.from_matrix(T_obj[:3,:3])
+        R_curr = R.from_matrix(T_obj[:3, :3])
         R_rel = self.R_start.inv() * R_curr
         angle = R_rel.magnitude()
         if angle > self.max_rot_angle:
             return False
 
-        # IK für beide Arme (eine Lösung genügt)
-        pose_left  = T_to_posevec(T_obj @ self.T_obj_left_off)
+        # --- IK für linken Arm ---
+        METRICS["ik_calls_left"] += 1
+        pose_left = T_to_posevec(T_obj @ self.T_obj_left_off)
+        okL, qL = batch_ik_and_filter(self.ik_left, [pose_left])[0]
+        if okL:
+            METRICS["ik_success_left"] += 1
+        if not okL:
+            return False
 
+        # --- IK für rechten Arm ---
+        METRICS["ik_calls_right"] += 1
         T_ee_right_leftbasis = T_obj @ self.T_obj_right_off
         T_ee_right = np.linalg.inv(self.base_offset_right) @ T_ee_right_leftbasis
         pose_right = T_to_posevec(T_ee_right)
-
-        okL, qL = batch_ik_and_filter(self.ik_left,  [pose_left])[0]
-        if not okL: return False
         okR, qR = batch_ik_and_filter(self.ik_left, [pose_right])[0]
-        if not okR: return False
+        if okR:
+            METRICS["ik_success_right"] += 1
+        if not okR:
+            return False
 
+        # --- Vollständige q-Vektoren ---
         qL_full = expand_q_to_full(self.checker.left, qL)
         qR_full = expand_q_to_full(self.checker.right, qR)
 
-        # Kollisionen Arme/Object gegen Obstacles
-        return not self.checker.any_collision(qL_full, qR_full, T_obj)
+        # --- Kollision ---
+        METRICS["collision_checks"] += 1
+        collision = self.checker.any_collision(qL_full, qR_full, T_obj)
+        if collision:
+            METRICS["collisions_found"] += 1
+            return False
+
+        return True
+
 
 # ---------------------------
 # OMPL Planung
 # ---------------------------
 def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, checker,
                    T_obj_left_off, T_obj_right_off, R_start,
-                   time_limit=60.0, simplify=True, range_hint=None, max_rot_deg=35):
+                   time_limit=60.0, simplify=True, range_hint=None, max_rot_deg=35,
+                   sv_resolution=0.02, goal_bias=None, interp_res=0.01, planner_range=None):
+    
+    for k in METRICS:
+        METRICS[k] = 0
+
     space = ob.SE3StateSpace()
 
     # Positionsgrenzen
@@ -321,7 +374,7 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, checker,
                            R_start, max_rot_angle=np.deg2rad(max_rot_deg), base_offset_right=ROBOT_TO_BASE_TRANSFORM["iiwa7_R"])
     ))
     # etwas gröbere Auflösung spart IK-Aufrufe; bei Bedarf feiner machen (z. B. 0.01)
-    si.setStateValidityCheckingResolution(0.02)
+    si.setStateValidityCheckingResolution(float(sv_resolution))
     si.setup()
 
     # Startzustand
@@ -353,14 +406,17 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, checker,
         ob.PathLengthOptimizationObjective(si)
     )
     # --- RRT* statt RRTConnect ---
-    planner = og.RRTstar(si)
+    planner = og.RRTConnect(si)     # oder RRTstar, egal
     if range_hint is not None:
-        planner.setRange(float(range_hint))   # maximale Schrittweite
-    planner.setGoalBias(0.05)                 # Wahrscheinlichkeit direkt Richtung Ziel
-    planner.setRewireFactor(1.1)              # Standardwert
-    
+        planner.setRange(float(range_hint))
+    elif planner_range is not None:
+        planner.setRange(float(planner_range))
+    if goal_bias is not None:
+        planner.setGoalBias(float(goal_bias))
+
+    #planner.setGoalBias(0.05)
     planner.setProblemDefinition(pdef)
-    planner.setup()
+    planner.setup()   # nur EINMAL aufrufen
 
     solved = planner.solve(time_limit)
     if not solved:
@@ -371,10 +427,14 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, checker,
         og.PathSimplifier(si).simplifyMax(path_geom)
 
     # dynamische Interpolation: z. B. alle 0.01 m ein Wegpunkt
-    resolution = 0.01  # 1 cm
+    resolution = float(interp_res)
     n_states = int(path_geom.length() / resolution)
     if n_states > 0:
         path_geom.interpolate(n_states)
+
+    # Pfadlänge direkt aus OMPL
+    path_length = path_geom.length()
+    METRICS['path_length'] = path_length
 
     # States -> Posevec (x,y,z, qw,qx,qy,qz)
     out = []
@@ -382,9 +442,24 @@ def plan_with_ompl(start_pose, goal_pose, bounds, ik_left, checker,
         xyz = [s.getX(), s.getY(), s.getZ()]
         r = s.rotation()
         out.append([*xyz, r.w, r.x, r.y, r.z])
+
+    # explizit Ressourcen freigeben (OMPL/C++)
+    del path_geom
+    del planner
+    del pdef
+    del si
+    del space
+
+    print("\n========== METRICS ==========")
+    print(f"Validity checks: {METRICS['validity_checks']}")
+    print(f"IK calls left/right: {METRICS['ik_calls_left']} / {METRICS['ik_calls_right']}")
+    print(f"IK success left/right: {METRICS['ik_success_left']} / {METRICS['ik_success_right']}")
+    print(f"Collision checks: {METRICS['collision_checks']}")
+    print(f"Collisions found: {METRICS['collisions_found']}")
+    print(f"Path length: {METRICS['path_length']:.4f} m")
+    print("================================\n")
+    
     return out
-
-
 
 def visualize_path_animated(world, robot_left, robot_right, obj, path, T_obj_left_off, T_obj_right_off, dt=0.05):
     """
@@ -447,6 +522,23 @@ def main():
     # neues Argument
     ap.add_argument("--max_rot_deg", type=float, default=35.0,
                     help="Maximal erlaubte Abweichung der Objektrotation in Grad (Standard: 35°)")
+    ap.add_argument("--ignore_links_left", default="", help="Komma-getrennte Linknamen, die bei Kollision (links) ignoriert werden")
+    ap.add_argument("--ignore_links_right", default="", help="Komma-getrennte Linknamen, die bei Kollision (rechts) ignoriert werden")
+    ap.add_argument("--ignore_links_obstacles", default="", help="Komma-getrennte Linknamen der Hindernisroboter, die ignoriert werden")
+    ap.add_argument("--skip_object_vs_obstacles", action="store_true", help="Objekt gegen Hindernisse nicht prüfen")
+    ap.add_argument("--collision_padding", type=float, default=0.0,
+                    help="Erlaube Penetration bis zu diesem Wert (m), z.B. 0.01 für 1 cm Lockerung")
+    ap.add_argument("--fast_exit", action="store_true",
+                    help="Nutze os._exit(0), um Destruktor-bedingte double-free beim Shutdown zu vermeiden")
+    ap.add_argument("--sv_resolution", type=float, default=0.02,
+                    help="State-validity Auflösung (größer = weniger Checks, schneller)")
+    ap.add_argument("--planner_range", type=float, default=None,
+                    help="RRTConnect Range; wenn None wird OMPL-Autotuning genutzt")
+    ap.add_argument("--goal_bias", type=float, default=None,
+                    help="Goal bias für RRTConnect (0..1). Höher = schnellere, aber evtl. schlechtere Abdeckung")
+    ap.add_argument("--interp_res", type=float, default=0.01,
+                    help="Interpolation-Auflösung für Ausgabewegpunkte (m)")
+    ap.add_argument("--skip_simplify", action="store_true", help="Pfad-Simplifier überspringen (schneller)")
 
     args = ap.parse_args()
     set_seed(args.seed)
@@ -458,6 +550,12 @@ def main():
         qw,qx,qy,qz = normalize_quat(v[3],v[4],v[5],v[6])
         v[3],v[4],v[5],v[6] = qw,qx,qy,qz
         return v
+
+    def parse_ignore_list(s):
+        s = s.strip()
+        if not s:
+            return []
+        return [x.strip() for x in s.split(",") if x.strip()]
 
 
     start_pose=parse_pose(args.start_obj)
@@ -507,7 +605,18 @@ def main():
                 raise RuntimeError(f"Hindernis-URDF konnte nicht geladen werden: {path}")
             obstacles.append(r)
 
-    checker = DualArmCollisionChecker(world, robot_left, robot_right, obj, obstacles)
+    ignore_left = parse_ignore_list(args.ignore_links_left)
+    ignore_right = parse_ignore_list(args.ignore_links_right)
+    ignore_obs = parse_ignore_list(args.ignore_links_obstacles)
+
+    checker = DualArmCollisionChecker(
+        world, robot_left, robot_right, obj, obstacles,
+        ignore_links_left=ignore_left,
+        ignore_links_right=ignore_right,
+        ignore_links_obstacles=ignore_obs,
+        check_object_vs_obstacles=not args.skip_object_vs_obstacles,
+        collision_padding=args.collision_padding,
+    )
     # --- Pre-Check Start/Goal ---
     space = ob.SE3StateSpace()
     si_tmp = ob.SpaceInformation(space)  # nur für State-Objekterzeugung
@@ -555,8 +664,13 @@ def main():
     path = plan_with_ompl(start_pose, goal_pose, bounds,
                           ik_left, checker,
                           T_obj_left_off, T_obj_right_off, R_start,
-                          time_limit=args.time_limit, simplify=True,
-                          max_rot_deg=args.max_rot_deg)
+                          time_limit=args.time_limit,
+                          simplify=not args.skip_simplify,
+                          max_rot_deg=args.max_rot_deg,
+                          sv_resolution=args.sv_resolution,
+                          goal_bias=args.goal_bias,
+                          interp_res=args.interp_res,
+                          range_hint=args.planner_range if hasattr(args, "planner_range") else None)
     dt=time()-t0
 
     if path is None:
@@ -577,7 +691,7 @@ def main():
     poses_left  = [T_to_posevec(m @ T_obj_left_off)  for m in mats]
     poses_right = [T_to_posevec(m @ T_obj_right_off) for m in mats]
 
-    # IK entlang des Pfades (je 1 Lösung pro Wegpunkt)
+    """# IK entlang des Pfades (je 1 Lösung pro Wegpunkt)
     resL = batch_ik_and_filter(ik_left, poses_left)
     resR = batch_ik_and_filter(ik_left, poses_right)
 
@@ -595,7 +709,7 @@ def main():
     right_csv = f"{args.save_prefix}_ik_right.csv"
     pd.DataFrame(qL_list).to_csv(left_csv, index=False, header=False)
     pd.DataFrame(qR_list).to_csv(right_csv, index=False, header=False)
-    print("Gespeichert:", left_csv, right_csv)
+    print("Gespeichert:", left_csv, right_csv)"""
 
     # Endeffektor-Posepfade (für Visualisierung)
     ee_left_csv  = f"{args.save_prefix}_ee_left.csv"
@@ -609,7 +723,18 @@ def main():
     print("Gespeichert:", ee_left_csv, ee_right_csv)
 
     print("Fertig.")
-    visualize_path_animated(world, robot_left, robot_right, obj, path, T_obj_left_off, T_obj_right_off, dt=0.05)
+
+    # native Ressourcen freigeben
+    try:
+        world.destroy()
+    except Exception:
+        pass
+
+    if args.fast_exit:
+        sys.stdout.flush(); sys.stderr.flush()
+        os._exit(0)
+
+    #visualize_path_animated(world, robot_left, robot_right, obj, path, T_obj_left_off, T_obj_right_off, dt=0.05)
 
 if __name__=="__main__":
     main()

@@ -1,0 +1,4 @@
+Arm,Problem,Robot,Planner,Valid plan,"time, total (s)","time, ikflow (s)","time, coll_checking (s)","time, batch_opt (s)","time, dp_search (s)","time, optimizer (s)",time per opt. step (s),Max positional error (mm),Max rotational error (deg),Mean positional error (mm),Mean rotational error (deg),Mjac - prismatic (cm),Mjac - revolute (deg)
+left,Kuka LBR IIWA7 Left - diag_links,iiwa7_L,CppFlow,`true`,0.5095,0.3084,0.0001,0.0,0.0871,0.0,0.0,0.00539,0.05595,0.00053,0.05595,0.0,4.17327
+right,Kuka LBR IIWA7 Right - diag_rechts,iiwa7_R,CppFlow,`true`,0.4611,0.0499,0.0001,0.0,0.0844,0.0,0.0,0.00137,0.05595,0.00027,0.05595,0.0,6.74045
+combined,Kuka LBR IIWA7 Left - diag_links|Kuka LBR IIWA7 Right - diag_rechts,dual,CppFlow,`true`,0.9705999999999999,0.3583,0.0002,0.0,0.17149999999999999,0.0,0.0,0.0033799999999999998,0.05595,0.00039999999999999996,0.05595,0.0,5.45686
